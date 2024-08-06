@@ -846,12 +846,12 @@ fn pre_process_outputs(
 
     if compute_addresses {
         partial_txout_data_vec
-            .par_iter_mut()
+            .iter_mut()
+            // .par_iter_mut()
             .for_each(|partial_tx_out_data| {
                 if let Some(partial_tx_out_data) = partial_tx_out_data {
                     let address_index_opt = address_to_address_index
-                        .unsafe_get(partial_tx_out_data.address.as_ref().unwrap())
-                        .cloned();
+                        .unsafe_get(partial_tx_out_data.address.as_ref().unwrap());
 
                     partial_tx_out_data.address_index_opt = address_index_opt;
                 }
@@ -892,12 +892,13 @@ fn pre_process_inputs<'a>(
         });
 
     let mut tx_datas = txid_to_tx_data
-        .par_iter()
+        .iter()
+        // .par_iter()
         .map(|(txid, _)| txid_to_tx_data_db.unsafe_get(txid))
         .collect::<Vec<_>>();
 
     txid_to_tx_data.values_mut().rev().for_each(|tx_data_opt| {
-        *tx_data_opt = tx_datas.pop().unwrap().cloned();
+        *tx_data_opt = tx_datas.pop().unwrap();
     });
 
     let txout_index_to_amount_and_address_index = block
@@ -923,7 +924,8 @@ fn pre_process_inputs<'a>(
             }
         })
         .collect_vec()
-        .into_par_iter()
+        .into_iter()
+        // .into_par_iter()
         .flat_map(|txout_index| {
             txout_index_to_amount_db
                 .unsafe_get(&txout_index)
@@ -932,12 +934,12 @@ fn pre_process_inputs<'a>(
                 // which is used later as input
                 .map(|amount| {
                     let address_index = compute_addresses.then(|| {
-                        *txout_index_to_address_index_db
+                        txout_index_to_address_index_db
                             .unsafe_get(&txout_index)
                             .unwrap()
                     });
 
-                    (txout_index, (*amount, address_index))
+                    (txout_index, (amount, address_index))
                 })
         })
         .collect::<BTreeMap<_, _>>();
@@ -981,7 +983,8 @@ fn compute_address_index_to_address_data(
         .collect::<BTreeMap<_, _>>();
 
     address_index_to_address_data
-        .par_iter_mut()
+        .iter_mut()
+        // .par_iter_mut()
         .for_each(|(address_index, address_data)| {
             if let Some(_address_data) =
                 address_index_to_address_data_db.unsafe_get_from_cache(address_index)
@@ -1000,7 +1003,7 @@ fn compute_address_index_to_address_data(
                     .unsafe_get_from_db(address_index)
                     .unwrap();
 
-                *address_data = AddressData::from_empty(empty_address_data);
+                *address_data = AddressData::from_empty(&empty_address_data);
             }
         });
 

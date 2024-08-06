@@ -1,10 +1,13 @@
 use allocative::Allocative;
 use color_eyre::eyre::eyre;
 use sanakirja::{direct_repr, Storable, UnsizedStorable};
+use serde::{Deserialize, Serialize};
 
 use super::{AddressType, Amount, EmptyAddressData, LiquidityClassification, Price};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Allocative)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Allocative, Serialize, Deserialize,
+)]
 pub struct AddressData {
     pub address_type: AddressType,
     pub amount: Amount,

@@ -1,16 +1,23 @@
 use std::{collections::BTreeMap, mem, thread};
 
 use allocative::Allocative;
+use heed::{
+    byteorder::NativeEndian,
+    types::{SerdeBincode, U32},
+};
 use rayon::prelude::*;
 
 use crate::structs::{Address, Date, Height};
 
-use super::{AnyDatabaseGroup, Database, Metadata, U8x19, U8x31};
+use super::{AnyDatabaseGroup, HeedDatabase, Metadata};
 
+type U8x19 = [u8; 19];
+type U8x31 = [u8; 31];
 type Value = u32;
-type U8x19Database = Database<U8x19, Value>;
-type U8x31Database = Database<U8x31, Value>;
-type U32Database = Database<u32, Value>;
+type ValueDB = U32<NativeEndian>;
+type U8x19Database = HeedDatabase<U8x19, Value, SerdeBincode<U8x19>, ValueDB>;
+type U8x31Database = HeedDatabase<U8x31, Value, SerdeBincode<U8x31>, ValueDB>;
+type U32Database = HeedDatabase<Value, Value, ValueDB, ValueDB>;
 
 type P2PKDatabase = U8x19Database;
 type P2PKHDatabase = U8x19Database;
@@ -96,7 +103,7 @@ impl AddressToAddressIndex {
 
     /// Doesn't check if the database is open contrary to `safe_get` which does and opens if needed.
     /// Though it makes it easy to use with rayon
-    pub fn unsafe_get(&self, address: &Address) -> Option<&Value> {
+    pub fn unsafe_get(&self, address: &Address) -> Option<Value> {
         match address {
             Address::Empty(key) => self.empty.as_ref().unwrap().get(key),
             Address::Unknown(key) => self.unknown.as_ref().unwrap().get(key),
@@ -137,18 +144,18 @@ impl AddressToAddressIndex {
             Address::OpReturn(key) => self.open_op_return().insert(key, value),
             Address::PushOnly(key) => self.open_push_only().insert(key, value),
             Address::MultiSig(key) => self.open_multisig().insert(key, value),
-            Address::P2PK((prefix, rest)) => self.open_p2pk(prefix).insert(rest, value),
-            Address::P2PKH((prefix, rest)) => self.open_p2pkh(prefix).insert(rest, value),
-            Address::P2SH((prefix, rest)) => self.open_p2sh(prefix).insert(rest, value),
-            Address::P2WPKH((prefix, rest)) => self.open_p2wpkh(prefix).insert(rest, value),
-            Address::P2WSH((prefix, rest)) => self.open_p2wsh(prefix).insert(rest, value),
-            Address::P2TR((prefix, rest)) => self.open_p2tr(prefix).insert(rest, value),
+            Address::P2PK((prefix, rest)) => self.open_p2pk(prefix).insert(*rest, value),
+            Address::P2PKH((prefix, rest)) => self.open_p2pkh(prefix).insert(*rest, value),
+            Address::P2SH((prefix, rest)) => self.open_p2sh(prefix).insert(*rest, value),
+            Address::P2WPKH((prefix, rest)) => self.open_p2wpkh(prefix).insert(*rest, value),
+            Address::P2WSH((prefix, rest)) => self.open_p2wsh(prefix).insert(*rest, value),
+            Address::P2TR((prefix, rest)) => self.open_p2tr(prefix).insert(*rest, value),
         }
     }
 
     pub fn open_p2pk(&mut self, prefix: u16) -> &mut P2PKDatabase {
         self.p2pk.entry(prefix).or_insert_with(|| {
-            Database::open(
+            HeedDatabase::open(
                 &format!("{}/{}", Self::folder(), "p2pk"),
                 &prefix.to_string(),
             )
@@ -158,7 +165,7 @@ impl AddressToAddressIndex {
 
     pub fn open_p2pkh(&mut self, prefix: u16) -> &mut P2PKHDatabase {
         self.p2pkh.entry(prefix).or_insert_with(|| {
-            Database::open(
+            HeedDatabase::open(
                 &format!("{}/{}", Self::folder(), "p2pkh"),
                 &prefix.to_string(),
             )
@@ -168,7 +175,7 @@ impl AddressToAddressIndex {
 
     pub fn open_p2sh(&mut self, prefix: u16) -> &mut P2SHDatabase {
         self.p2sh.entry(prefix).or_insert_with(|| {
-            Database::open(
+            HeedDatabase::open(
                 &format!("{}/{}", Self::folder(), "p2sh"),
                 &prefix.to_string(),
             )
@@ -178,7 +185,7 @@ impl AddressToAddressIndex {
 
     pub fn open_p2wpkh(&mut self, prefix: u16) -> &mut P2WPKHDatabase {
         self.p2wpkh.entry(prefix).or_insert_with(|| {
-            Database::open(
+            HeedDatabase::open(
                 &format!("{}/{}", Self::folder(), "p2wpkh"),
                 &prefix.to_string(),
             )
@@ -188,7 +195,7 @@ impl AddressToAddressIndex {
 
     pub fn open_p2wsh(&mut self, prefix: u16) -> &mut P2WSHDatabase {
         self.p2wsh.entry(prefix).or_insert_with(|| {
-            Database::open(
+            HeedDatabase::open(
                 &format!("{}/{}", Self::folder(), "p2wsh"),
                 &prefix.to_string(),
             )
@@ -198,7 +205,7 @@ impl AddressToAddressIndex {
 
     pub fn open_p2tr(&mut self, prefix: u16) -> &mut P2TRDatabase {
         self.p2tr.entry(prefix).or_insert_with(|| {
-            Database::open(
+            HeedDatabase::open(
                 &format!("{}/{}", Self::folder(), "p2tr"),
                 &prefix.to_string(),
             )
@@ -208,27 +215,27 @@ impl AddressToAddressIndex {
 
     pub fn open_unknown(&mut self) -> &mut UnknownDatabase {
         self.unknown
-            .get_or_insert_with(|| Database::open(Self::folder(), "unknown").unwrap())
+            .get_or_insert_with(|| HeedDatabase::open(Self::folder(), "unknown").unwrap())
     }
 
     pub fn open_op_return(&mut self) -> &mut UnknownDatabase {
         self.op_return
-            .get_or_insert_with(|| Database::open(Self::folder(), "op_return").unwrap())
+            .get_or_insert_with(|| HeedDatabase::open(Self::folder(), "op_return").unwrap())
     }
 
     pub fn open_push_only(&mut self) -> &mut UnknownDatabase {
         self.push_only
-            .get_or_insert_with(|| Database::open(Self::folder(), "push_only").unwrap())
+            .get_or_insert_with(|| HeedDatabase::open(Self::folder(), "push_only").unwrap())
     }
 
     pub fn open_empty(&mut self) -> &mut UnknownDatabase {
         self.empty
-            .get_or_insert_with(|| Database::open(Self::folder(), "empty").unwrap())
+            .get_or_insert_with(|| HeedDatabase::open(Self::folder(), "empty").unwrap())
     }
 
     pub fn open_multisig(&mut self) -> &mut MultisigDatabase {
         self.multisig
-            .get_or_insert_with(|| Database::open(Self::folder(), "multisig").unwrap())
+            .get_or_insert_with(|| HeedDatabase::open(Self::folder(), "multisig").unwrap())
     }
 }
 
@@ -254,17 +261,17 @@ impl AnyDatabaseGroup for AddressToAddressIndex {
         thread::scope(|s| {
             s.spawn(|| {
                 mem::take(&mut self.p2pk)
-                    .into_par_iter()
-                    .chain(mem::take(&mut self.p2pkh).into_par_iter())
-                    .chain(mem::take(&mut self.p2sh).into_par_iter())
-                    .chain(mem::take(&mut self.p2wpkh).into_par_iter())
+                    .par_iter_mut()
+                    .chain(mem::take(&mut self.p2pkh).par_iter_mut())
+                    .chain(mem::take(&mut self.p2sh).par_iter_mut())
+                    .chain(mem::take(&mut self.p2wpkh).par_iter_mut())
                     .try_for_each(|(_, db)| db.export())
             });
 
             s.spawn(|| {
                 mem::take(&mut self.p2wsh)
-                    .into_par_iter()
-                    .chain(mem::take(&mut self.p2tr).into_par_iter())
+                    .par_iter_mut()
+                    .chain(mem::take(&mut self.p2tr).par_iter_mut())
                     .try_for_each(|(_, db)| db.export())
             });
 
@@ -275,12 +282,12 @@ impl AnyDatabaseGroup for AddressToAddressIndex {
                     self.push_only.take(),
                     self.empty.take(),
                 ]
-                .into_par_iter()
+                .par_iter_mut()
                 .flatten()
                 .try_for_each(|db| db.export())
             });
 
-            self.multisig.take().map(|db| db.export());
+            self.multisig.take().map(|mut db| db.export());
         });
 
         self.metadata.export(height, date)?;

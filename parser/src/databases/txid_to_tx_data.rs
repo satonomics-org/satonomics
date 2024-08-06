@@ -6,15 +6,18 @@ use std::{
 
 use allocative::Allocative;
 use biter::bitcoin::Txid;
+use heed::types::SerdeBincode;
 use rayon::prelude::*;
 
 use crate::structs::{Date, Height, TxData};
 
-use super::{AnyDatabaseGroup, Database as _Database, Metadata, U8x31};
+use super::{AnyDatabaseGroup, HeedDatabase, Metadata};
 
-type Key = U8x31;
+type Key = [u8; 31];
 type Value = TxData;
-type Database = _Database<Key, Value>;
+type KeyDB = SerdeBincode<Key>;
+type ValueDB = SerdeBincode<Value>;
+type Database = HeedDatabase<Key, Value, KeyDB, ValueDB>;
 
 #[derive(Allocative)]
 pub struct TxidToTxData {
@@ -53,7 +56,7 @@ impl TxidToTxData {
 
     /// Doesn't check if the database is open contrary to `safe_get` which does and opens if needed.
     /// Though it makes it easy to use with rayon
-    pub fn unsafe_get(&self, txid: &Txid) -> Option<&Value> {
+    pub fn unsafe_get(&self, txid: &Txid) -> Option<Value> {
         let txid_key = Self::txid_to_key(txid);
 
         let db_index = Self::db_index(txid);
@@ -109,8 +112,10 @@ impl TxidToTxData {
             .or_insert_with(|| Database::open(Self::folder(), &db_index.to_string()).unwrap())
     }
 
-    fn txid_to_key(txid: &Txid) -> U8x31 {
-        U8x31::from(&txid[1..])
+    fn txid_to_key(txid: &Txid) -> [u8; 31] {
+        let mut arr = [0_u8; 31];
+        arr.copy_from_slice(&txid[1..]);
+        arr
     }
 
     fn db_index(txid: &Txid) -> u8 {
@@ -128,7 +133,7 @@ impl AnyDatabaseGroup for TxidToTxData {
 
     fn export(&mut self, height: Height, date: Date) -> color_eyre::Result<()> {
         mem::take(&mut self.map)
-            .into_par_iter()
+            .par_iter_mut()
             .try_for_each(|(_, db)| db.export())?;
 
         self.metadata.export(height, date)?;

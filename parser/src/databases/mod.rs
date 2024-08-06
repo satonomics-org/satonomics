@@ -14,6 +14,7 @@ mod txout_index_to_address_index;
 mod txout_index_to_amount;
 
 pub use _database::*;
+pub use _database_heed::*;
 use _trait::*;
 pub use address_index_to_address_data::*;
 pub use address_index_to_empty_address_data::*;

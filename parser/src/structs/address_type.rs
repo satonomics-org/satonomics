@@ -1,9 +1,22 @@
 use allocative::Allocative;
 use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 // https://unchained.com/blog/bitcoin-address-types-compared/
 #[derive(
-    Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Default, Encode, Decode, Allocative,
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Default,
+    Serialize,
+    Deserialize,
+    Encode,
+    Decode,
+    Allocative,
 )]
 pub enum AddressType {
     Empty,

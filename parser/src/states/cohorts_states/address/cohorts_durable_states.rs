@@ -19,7 +19,7 @@ impl AddressCohortsDurableStates {
 
         // Paralize that, different s could be added together
         address_index_to_address_data
-            .iter(&mut |(_, address_data)| s.increment(address_data).unwrap());
+            .iter(&mut |(_, address_data)| s.increment(&address_data).unwrap());
 
         s
     }

@@ -5,15 +5,21 @@ use std::{
 };
 
 use allocative::Allocative;
+use heed::{
+    byteorder::NativeEndian,
+    types::{SerdeBincode, U32},
+};
 use rayon::prelude::*;
 
 use crate::structs::{Date, Height, TxoutIndex};
 
-use super::{AnyDatabaseGroup, Database as _Database, Metadata};
+use super::{AnyDatabaseGroup, HeedDatabase, Metadata};
 
 type Key = TxoutIndex;
 type Value = u32;
-type Database = _Database<Key, Value>;
+type KeyDB = SerdeBincode<TxoutIndex>;
+type ValueDB = U32<NativeEndian>;
+type Database = HeedDatabase<Key, Value, KeyDB, ValueDB>;
 
 #[derive(Allocative)]
 pub struct TxoutIndexToAddressIndex {
@@ -61,7 +67,7 @@ impl TxoutIndexToAddressIndex {
 
     /// Doesn't check if the database is open contrary to `safe_get` which does and opens if needed
     /// Though it makes it easy to use with rayon.
-    pub fn unsafe_get(&self, key: &Key) -> Option<&Value> {
+    pub fn unsafe_get(&self, key: &Key) -> Option<Value> {
         let db_index = Self::db_index(key);
 
         self.get(&db_index).unwrap().get(key)
@@ -96,7 +102,7 @@ impl AnyDatabaseGroup for TxoutIndexToAddressIndex {
 
     fn export(&mut self, height: Height, date: Date) -> color_eyre::Result<()> {
         mem::take(&mut self.map)
-            .into_par_iter()
+            .par_iter_mut()
             .try_for_each(|(_, db)| db.export())?;
 
         self.metadata.export(height, date)?;

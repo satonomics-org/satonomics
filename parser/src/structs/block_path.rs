@@ -1,7 +1,21 @@
 use allocative::Allocative;
 use bincode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord, Copy, Encode, Decode, Allocative)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    PartialOrd,
+    Eq,
+    Ord,
+    Copy,
+    Encode,
+    Decode,
+    Allocative,
+    Serialize,
+    Deserialize,
+)]
 pub struct BlockPath {
     pub date_index: u16,
     pub block_index: u16,

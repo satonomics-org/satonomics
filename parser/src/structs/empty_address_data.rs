@@ -1,9 +1,12 @@
 use allocative::Allocative;
 use sanakirja::{direct_repr, Storable, UnsizedStorable};
+use serde::{Deserialize, Serialize};
 
 use super::{AddressData, AddressType, Amount};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Allocative)]
+#[derive(
+    Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Default, Allocative, Serialize, Deserialize,
+)]
 pub struct EmptyAddressData {
     pub address_type: AddressType,
     pub transfered: Amount,

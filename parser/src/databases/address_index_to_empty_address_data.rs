@@ -5,15 +5,21 @@ use std::{
 };
 
 use allocative::Allocative;
+use heed::{
+    byteorder::NativeEndian,
+    types::{SerdeBincode, U32},
+};
 use rayon::prelude::*;
 
 use crate::structs::{Date, EmptyAddressData, Height};
 
-use super::{AnyDatabaseGroup, Database as _Database, Metadata};
+use super::{AnyDatabaseGroup, HeedDatabase, Metadata};
 
 type Key = u32;
 type Value = EmptyAddressData;
-type Database = _Database<Key, Value>;
+type KeyDB = U32<NativeEndian>;
+type ValueDB = SerdeBincode<EmptyAddressData>;
+type Database = HeedDatabase<Key, Value, KeyDB, ValueDB>;
 
 #[derive(Allocative)]
 pub struct AddressIndexToEmptyAddressData {
@@ -59,7 +65,7 @@ impl AddressIndexToEmptyAddressData {
         self.get(&db_index).and_then(|db| db.get_from_puts(key))
     }
 
-    pub fn unsafe_get_from_db(&self, key: &Key) -> Option<&Value> {
+    pub fn unsafe_get_from_db(&self, key: &Key) -> Option<Value> {
         let db_index = Self::db_index(key);
 
         self.get(&db_index)
@@ -99,7 +105,7 @@ impl AnyDatabaseGroup for AddressIndexToEmptyAddressData {
 
     fn export(&mut self, height: Height, date: Date) -> color_eyre::Result<()> {
         mem::take(&mut self.map)
-            .into_par_iter()
+            .par_iter_mut()
             .try_for_each(|(_, db)| db.export())?;
 
         self.metadata.export(height, date)?;

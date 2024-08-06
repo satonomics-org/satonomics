@@ -1,8 +1,22 @@
 use allocative::Allocative;
 use bincode::{Decode, Encode};
 use sanakirja::{direct_repr, Storable, UnsizedStorable};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Encode, Decode, Allocative)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Clone,
+    Copy,
+    Encode,
+    Decode,
+    Allocative,
+    Serialize,
+    Deserialize,
+)]
 pub struct TxoutIndex {
     pub tx_index: u32,
     pub vout: u16,
