@@ -47,7 +47,7 @@ impl CapitalizedPriceVecs {
         let build = |weight: &str, sources: &UTXOAggregate<CachedSeries<Day1, Cents>>| {
             UTXOAggregate::from_fn(|id| {
                 LazyDailyPriceWithRatio::from_day1_source(
-                    &id.metric_name(&format!("{weight}_capitalized_price")),
+                    &id.metric_name(&format!("{weight}_urpd_capitalized_price")),
                     version,
                     id.select(sources),
                     indexes,

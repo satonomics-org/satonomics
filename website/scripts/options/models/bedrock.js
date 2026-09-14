@@ -173,6 +173,29 @@ export function createBedrockSection() {
       {
         name: "Cost Basis",
         tree: [
+          {
+            name: "Age Bounds",
+            tree: /** @type {const} */ ([
+              { key: "under4m", name: "<4M" },
+              { key: "under5m", name: "<5M" },
+              { key: "under6m", name: "<6M" },
+            ]).map(({ key, name }) => ({
+              name,
+              title: `${name} URPD Cost Basis Min/Max`,
+              top: [
+                price({
+                  series: bedrock.costBasis.ageBounds[key].min,
+                  name: "Min",
+                  color: colors.stat.min,
+                }),
+                price({
+                  series: bedrock.costBasis.ageBounds[key].max,
+                  name: "Max",
+                  color: colors.stat.max,
+                }),
+              ],
+            })),
+          },
           costBasisGroup(
             "Per Coin",
             "BTC-weighted",

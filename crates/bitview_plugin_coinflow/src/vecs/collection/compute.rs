@@ -8,7 +8,10 @@ use bitview_plugin::{ComputePlugin, UpdateContext};
 use bitview_plugin_indexer::Lengths;
 use brk_error::Result;
 use brk_exit::Exit;
-use brk_types::{Bitcoin, BoundedRatio, Cents, Height, Sats, StoredF64, Timestamp, Version};
+use brk_types::{
+    Bitcoin, BoundedRatio, Cents, CentsSats, CentsSquaredSats, Height, Sats, StoredF64, Timestamp,
+    Version,
+};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use vecdb::{AnyStoredVec, ReadableVec, VecValue, WritableVec};
 
@@ -73,6 +76,10 @@ impl ComputePlugin for Vecs {
                 .cents
                 .height
         });
+        let cap_raw = AgeRange::from_fn(|id| id.select(&distribution.cohorts.realized.cap_raw.age));
+        let capitalized_cap_raw = AgeRange::from_fn(|id| {
+            id.select(&distribution.cohorts.realized.capitalized_cap_raw.age)
+        });
         let coindays_created =
             AgeRange::from_fn(|id| &id.select(&distribution.coindays_created).cumulative.height);
 
@@ -84,6 +91,8 @@ impl ComputePlugin for Vecs {
             &supplies,
             &loss_supplies,
             &realized_caps,
+            &cap_raw,
+            &capitalized_cap_raw,
             exit,
         )?;
 
@@ -149,6 +158,8 @@ struct PrimaryBatch {
     supplies: AgeRange<Vec<Sats>>,
     loss_supplies: AgeRange<Vec<Sats>>,
     realized_caps: AgeRange<Vec<Cents>>,
+    cap_raw: AgeRange<Vec<CentsSats>>,
+    capitalized_cap_raw: AgeRange<Vec<CentsSquaredSats>>,
 }
 
 impl PrimaryBatch {
@@ -160,6 +171,8 @@ impl PrimaryBatch {
         supplies: &AgeRange<&impl ReadableVec<Height, Sats>>,
         loss_supplies: &AgeRange<&impl ReadableVec<Height, Sats>>,
         realized_caps: &AgeRange<&impl ReadableVec<Height, Cents>>,
+        cap_raw: &AgeRange<&impl ReadableVec<Height, CentsSats>>,
+        capitalized_cap_raw: &AgeRange<&impl ReadableVec<Height, CentsSquaredSats>>,
         start: usize,
         end: usize,
     ) -> Self {
@@ -170,6 +183,8 @@ impl PrimaryBatch {
             supplies: Self::collect_age_range(supplies, start, end),
             loss_supplies: Self::collect_age_range(loss_supplies, start, end),
             realized_caps: Self::collect_age_range(realized_caps, start, end),
+            cap_raw: Self::collect_age_range(cap_raw, start, end),
+            capitalized_cap_raw: Self::collect_age_range(capitalized_cap_raw, start, end),
         }
     }
 
@@ -232,6 +247,11 @@ impl PrimaryBatch {
             } else {
                 &mut terms.long
             };
+            term.weighted.capitalized_price.add(
+                id.select(&self.cap_raw)[offset],
+                id.select(&self.capitalized_cap_raw)[offset],
+                mobility,
+            );
             term.add(
                 total_supply,
                 loss_supply,
@@ -279,6 +299,8 @@ impl Vecs {
         supplies: &AgeRange<&impl ReadableVec<Height, Sats>>,
         loss_supplies: &AgeRange<&impl ReadableVec<Height, Sats>>,
         realized_caps: &AgeRange<&impl ReadableVec<Height, Cents>>,
+        cap_raw: &AgeRange<&impl ReadableVec<Height, CentsSats>>,
+        capitalized_cap_raw: &AgeRange<&impl ReadableVec<Height, CentsSquaredSats>>,
         exit: &Exit,
     ) -> Result<Height> {
         let source_version = Version::combine_all(
@@ -287,7 +309,9 @@ impl Vecs {
                 .chain(coindays_created.iter().map(|vec| vec.version()))
                 .chain(supplies.iter().map(|vec| vec.version()))
                 .chain(loss_supplies.iter().map(|vec| vec.version()))
-                .chain(realized_caps.iter().map(|vec| vec.version())),
+                .chain(realized_caps.iter().map(|vec| vec.version()))
+                .chain(cap_raw.iter().map(|vec| vec.version()))
+                .chain(capitalized_cap_raw.iter().map(|vec| vec.version())),
         );
 
         for vec in self.primary_vecs_mut() {
@@ -312,6 +336,8 @@ impl Vecs {
             .chain(supplies.iter().map(|vec| vec.len()))
             .chain(loss_supplies.iter().map(|vec| vec.len()))
             .chain(realized_caps.iter().map(|vec| vec.len()))
+            .chain(cap_raw.iter().map(|vec| vec.len()))
+            .chain(capitalized_cap_raw.iter().map(|vec| vec.len()))
             .chain(iter::once(timestamps.len()))
             .min()
             .unwrap_or_default();
@@ -334,6 +360,8 @@ impl Vecs {
                 supplies,
                 loss_supplies,
                 realized_caps,
+                cap_raw,
+                capitalized_cap_raw,
                 chunk_start,
                 chunk_end,
             );
@@ -421,6 +449,8 @@ impl AggregateSources {
                 .push(state.weighted.supply_in_loss.value());
             id.select_mut(&mut self.cap)
                 .push(state.weighted.weighted_cap);
+            id.select_mut(&mut self.capitalized_price)
+                .push(state.weighted.capitalized_price.value());
             id.select_mut(&mut self.price)
                 .push(state.weighted.realized_price());
             for horizon in HorizonId::ALL {
@@ -437,6 +467,7 @@ impl AggregateSources {
             horizon,
             cap,
             price,
+            capitalized_price,
         } = self;
         let Horizons {
             _8y,
@@ -463,6 +494,9 @@ impl AggregateSources {
             &mut price.all,
             &mut price.sth,
             &mut price.lth,
+            &mut capitalized_price.all,
+            &mut capitalized_price.sth,
+            &mut capitalized_price.lth,
         ]
         .into_iter()
         .chain(
@@ -696,6 +730,14 @@ mod tests {
             supplies: AgeRange::from_fn(|_| vec![supply]),
             loss_supplies: AgeRange::from_fn(|_| vec![Sats::from(10_u64)]),
             realized_caps: AgeRange::from_fn(|_| vec![cap]),
+            cap_raw: AgeRange::from_fn(|_| {
+                vec![CentsSats::new(cap.as_u128() * Sats::ONE_BTC_U128)]
+            }),
+            capitalized_cap_raw: AgeRange::from_fn(|_| {
+                vec![CentsSquaredSats::new(
+                    3_000 * cap.as_u128() * Sats::ONE_BTC_U128,
+                )]
+            }),
         };
         let values = batch.primary_values(0, Timestamp::ZERO, &bounds);
         let mut expected = WeightedCohortState::default();
@@ -711,6 +753,13 @@ mod tests {
                 .iter()
                 .any(|value| *value != BoundedRatio::ZERO)
         );
+        for state in [
+            values.terms.short,
+            values.terms.long,
+            values.terms.short.merged(values.terms.long),
+        ] {
+            assert_eq!(state.weighted.capitalized_price.value(), Cents::new(3_000));
+        }
         let all = values.terms.short.merged(values.terms.long).weighted;
         assert_eq!(all.weighted_supply, expected.weighted_supply);
         assert_eq!(all.complement_supply, expected.complement_supply);

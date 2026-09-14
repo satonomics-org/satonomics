@@ -9,6 +9,10 @@ use vecdb::{AnyStoredVec, AnyVec, Database, ReadableVec, Rw, StorageMode, Writab
 
 use super::{COMPUTE_BATCH_SIZE, Component, component};
 
+#[cfg(test)]
+#[path = "score_tests.rs"]
+mod score_tests;
+
 #[derive(Traversable)]
 pub struct RarityMeterInner<M: StorageMode = Rw> {
     #[traversable(flatten)]
@@ -31,7 +35,8 @@ pub struct RarityMeterInner<M: StorageMode = Rw> {
     /// values mean more models identify a rare low valuation; more positive
     /// values mean more models identify a rare high valuation. It sums each
     /// component's rarity index: two-tailed ratio components contribute from -5
-    /// through 5 and lower-only direct components from -5 through 0.
+    /// through 5 and lower-only direct components from -5 through 0. The total
+    /// is capped to the storage range of -128 through 127.
     pub score: PerBlock<StoredI8, M>,
 }
 
@@ -56,7 +61,13 @@ pub fn forced_import(
     Ok(RarityMeterInner {
         prices,
         index: PerBlock::forced_import(db, &format!("{prefix}_index"), version, mappings)?,
-        score: PerBlock::forced_import(db, &format!("{prefix}_score"), version, mappings)?,
+        // Rebuild scores using capped totals instead of overflowing i8 sums.
+        score: PerBlock::forced_import(
+            db,
+            &format!("{prefix}_score"),
+            version + Version::ONE,
+            mappings,
+        )?,
     })
 }
 
@@ -325,13 +336,13 @@ impl RarityMeterInner {
                 for (offset, price) in spot.into_iter().enumerate() {
                     let value = component_prices
                         .iter()
-                        .map(|bands| Self::score_at(price, bands, offset))
-                        .sum::<i8>()
+                        .map(|bands| i16::from(Self::score_at(price, bands, offset)))
+                        .sum::<i16>()
                         + lower_component_prices
                             .iter()
-                            .map(|bands| Self::lower_score_at(price, bands, offset))
-                            .sum::<i8>();
-                    score.push(StoredI8::new(value));
+                            .map(|bands| i16::from(Self::lower_score_at(price, bands, offset)))
+                            .sum::<i16>();
+                    score.push(Self::capped_score(value));
                 }
 
                 Ok(())
@@ -369,8 +380,11 @@ impl RarityMeterInner {
                     .map(|meter| meter.score.height.collect_range_at(range.start, range.end))
                     .collect();
                 for offset in 0..range.len() {
-                    score.push(StoredI8::new(
-                        meter_scores.iter().map(|scores| *scores[offset]).sum(),
+                    score.push(Self::capped_score(
+                        meter_scores
+                            .iter()
+                            .map(|scores| i16::from(*scores[offset]))
+                            .sum(),
                     ));
                 }
 
@@ -380,6 +394,10 @@ impl RarityMeterInner {
         )?;
 
         Ok(())
+    }
+
+    fn capped_score(value: i16) -> StoredI8 {
+        StoredI8::new(value.clamp(i16::from(i8::MIN), i16::from(i8::MAX)) as i8)
     }
 
     fn combine_percentiles(
@@ -445,6 +463,7 @@ impl RarityMeterInner {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use RarityPercentileId::*;
 
     fn bands(values: [u64; 10]) -> [Vec<Cents>; 10] {
         values.map(|value| vec![Cents::from(value)])
@@ -452,8 +471,6 @@ mod tests {
 
     #[test]
     fn combines_tightest_boundaries_and_interpolates_inner_percentiles() {
-        use RarityPercentileId::*;
-
         let components = [
             bands([10, 20, 30, 40, 50, 500, 600, 700, 800, 900]),
             bands([15, 25, 35, 45, 55, 450, 550, 650, 750, 850]),
@@ -472,8 +489,6 @@ mod tests {
 
     #[test]
     fn includes_finite_direct_lower_boundaries_only() {
-        use RarityPercentileId::*;
-
         let components = [bands([10, 20, 30, 40, 50, 500, 600, 700, 800, 900])];
         let lower_components = [[
             vec![Some(Cents::from(15_u64))],

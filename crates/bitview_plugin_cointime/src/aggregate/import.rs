@@ -68,6 +68,11 @@ impl Sources {
             dormant_supply: import_aggregate(db, "dormant_supply_sats", version)?,
             awake_cap: import_aggregate(db, "awake_cap_cents", version)?,
             awake_price: import_aggregate(db, "awake_price_cents", version)?,
+            awake_capitalized_price: import_aggregate(
+                db,
+                "awake_capitalized_price_cents",
+                version,
+            )?,
             supply_in_loss_share: ByTerm::try_new(|cohort_id| {
                 let name = cohort_id.name();
                 import_cached(
@@ -123,6 +128,13 @@ impl CohortVecs {
                     version,
                     awake_cap,
                     mappings,
+                ),
+                capitalized_price: LazyPriceWithRatioPerBlock::from_height_source(
+                    &metric_name("awake_capitalized_price"),
+                    version,
+                    aggregate.select(&sources.awake_capitalized_price),
+                    mappings,
+                    spot_price,
                 ),
                 price: LazyPriceWithRatioPerBlock::from_height_source(
                     &metric_name("awake_price"),

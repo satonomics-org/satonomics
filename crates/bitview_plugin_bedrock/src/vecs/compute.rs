@@ -12,11 +12,11 @@ use vecdb::{AnyStoredVec, AnyVec, ReadableVec, VecValue, WritableVec};
 
 use super::Vecs;
 use crate::{
-    Calibration, DayResult, DayUrpds, Dependencies, LossPercentileId, ModeId, ModeResult, ModeVecs,
-    ModeWeights, PriceBandId, WeightedModeId, WeightedModes, WeightedPair, WeightedUrpdNames,
+    AgePriceBounds, Calibration, DayResult, DayUrpds, Dependencies, LossPercentileId, ModeId,
+    ModeResult, ModeVecs, ModeWeights, PriceBandId, WRITE_INTERVAL_DAYS, WeightedModeId,
+    WeightedModes, WeightedPair, WeightedUrpdNames,
 };
 
-const WRITE_INTERVAL_DAYS: usize = 100;
 const WEIGHTED_URPD_VERSION: Version = Version::TWO;
 
 impl ModeVecs {
@@ -198,6 +198,25 @@ impl ComputePlugin for Vecs {
             vec.any_truncate_if_needed_at(capitalized_start)?;
         }
 
+        let age_bounds_version = Version::combine_all(
+            iter::once(mappings.day1.date.version())
+                .chain(iter::once(distribution.supply_state.version()))
+                .chain(age_supplies.iter().map(|vec| vec.version())),
+        );
+        let age_bounds_start =
+            self.cost_basis
+                .age_bounds
+                .prepare(age_bounds_version, recompute_from, source_end)?;
+        if age_bounds_start < model_start {
+            self.cost_basis.age_bounds.backfill(
+                &mappings.day1.date,
+                &distribution.states_path,
+                age_bounds_start,
+                model_start,
+                exit,
+            )?;
+        }
+
         if capitalized_start < model_start {
             debug_assert!(weighted_urpd_is_current);
             self.backfill_capitalized_prices(
@@ -233,13 +252,19 @@ impl ComputePlugin for Vecs {
             let mut result = DayResult::from_thresholds(&thresholds);
             let mut cost_basis_data = WeightedPair::default();
             let mut capitalized_prices = Self::missing_capitalized_prices();
+            let mut age_price_bounds = AgePriceBounds::default();
 
             let needs_evaluation = thresholds.iter().any(Option::is_some);
             let needs_rebuild = !weighted_urpd_is_current || day_index >= recompute_from;
             let needs_cost_basis = day_index >= cost_basis_start;
             let needs_capitalized = day_index >= capitalized_start;
+            let needs_age_bounds = day_index >= age_bounds_start;
             if let Some(date) = mappings.day1.date.collect_one(day)
-                && (needs_rebuild || needs_evaluation || needs_cost_basis || needs_capitalized)
+                && (needs_rebuild
+                    || needs_evaluation
+                    || needs_cost_basis
+                    || needs_capitalized
+                    || needs_age_bounds)
             {
                 let weights = Self::mode_weights(
                     day,
@@ -256,6 +281,7 @@ impl ComputePlugin for Vecs {
                 };
 
                 if let Some(urpds) = urpds {
+                    age_price_bounds = urpds.age_price_bounds;
                     if needs_rebuild {
                         urpds.write(&self.states_path, &weighted_urpd_names, date)?;
                     }
@@ -273,6 +299,9 @@ impl ComputePlugin for Vecs {
             }
             calibration.observe(loss_shares);
 
+            if needs_age_bounds {
+                self.cost_basis.age_bounds.push(&age_price_bounds);
+            }
             if needs_cost_basis {
                 self.cost_basis.push(&cost_basis_data);
             }
@@ -290,6 +319,11 @@ impl ComputePlugin for Vecs {
                 let _lock = exit.lock();
                 for vec in self.model_stored_vecs_mut() {
                     vec.write()?;
+                }
+                if needs_age_bounds {
+                    for vec in self.cost_basis.age_bounds.stored_vecs_mut() {
+                        vec.write()?;
+                    }
                 }
                 if needs_cost_basis {
                     for vec in self.cost_basis.stored_vecs_mut() {

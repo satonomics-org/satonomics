@@ -1,15 +1,18 @@
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Once};
 
+use bitview_cohort::AgeRangeId;
+use bitview_plugin_distribution::UTXOStates;
 use bitview_traversable::Traversable;
 use bitview_vecs::DailyMappings;
-use brk_types::{Cents, Day1, Height, Version};
+use brk_exit::Exit;
+use brk_types::{Cents, CentsCompact, Date, Day1, Height, Sats, SupplyState, Version};
 use tempfile::tempdir;
 use vecdb::{
     AnyStoredVec, Budgeted, Database, EagerVec, ImportableVec, LazyVec, PcoVec, PcoVecValue,
     ReadableCloneableVec, ReadableVec, VecIndex, WritableVec,
 };
 
-use crate::{CostBasisVecs, DayUrpds, WeightedPair};
+use crate::{AgePriceBounds, AgePriceBoundsVecs, CostBasisVecs, DayUrpds, WeightedPair};
 
 fn mapping<I: VecIndex, T: PcoVecValue>(db: &Database, name: &str) -> LazyVec<I, Day1, I, T> {
     let source: EagerVec<PcoVec<I, T>> = EagerVec::forced_import(db, name, Version::ONE).unwrap();
@@ -21,33 +24,40 @@ fn mapping<I: VecIndex, T: PcoVecValue>(db: &Database, name: &str) -> LazyVec<I,
     )
 }
 
-#[test]
-fn density_series_persist_reopen_rewind_and_expose_normal_percent_units() {
-    Budgeted::init_global(64 * 1024 * 1024).unwrap();
-    let root = tempdir().unwrap();
-    let db = Database::open(root.path()).unwrap();
+fn daily_mappings(db: &Database) -> DailyMappings {
+    static CACHE: Once = Once::new();
+    CACHE.call_once(|| {
+        Budgeted::init_global(64 * 1024 * 1024).unwrap();
+    });
     let mut heights: EagerVec<PcoVec<Height, Day1>> =
-        EagerVec::forced_import(&db, "height_day1", Version::ONE).unwrap();
+        EagerVec::forced_import(db, "height_day1", Version::ONE).unwrap();
     heights.push(Day1::from(0_usize));
     heights.push(Day1::from(1_usize));
     heights.write().unwrap();
-    let mappings = DailyMappings {
+    DailyMappings {
         height: heights.read_only_boxed_clone(),
-        minute10: mapping(&db, "minute10"),
-        minute30: mapping(&db, "minute30"),
-        hour1: mapping(&db, "hour1"),
-        hour4: mapping(&db, "hour4"),
-        hour12: mapping(&db, "hour12"),
-        day3: mapping(&db, "day3"),
-        week1: mapping(&db, "week1"),
-        month1: mapping(&db, "month1"),
-        month3: mapping(&db, "month3"),
-        month6: mapping(&db, "month6"),
-        year1: mapping(&db, "year1"),
-        year10: mapping(&db, "year10"),
-        halving: mapping(&db, "halving"),
-        epoch: mapping(&db, "epoch"),
-    };
+        minute10: mapping(db, "minute10"),
+        minute30: mapping(db, "minute30"),
+        hour1: mapping(db, "hour1"),
+        hour4: mapping(db, "hour4"),
+        hour12: mapping(db, "hour12"),
+        day3: mapping(db, "day3"),
+        week1: mapping(db, "week1"),
+        month1: mapping(db, "month1"),
+        month3: mapping(db, "month3"),
+        month6: mapping(db, "month6"),
+        year1: mapping(db, "year1"),
+        year10: mapping(db, "year10"),
+        halving: mapping(db, "halving"),
+        epoch: mapping(db, "epoch"),
+    }
+}
+
+#[test]
+fn density_series_persist_reopen_rewind_and_expose_normal_percent_units() {
+    let root = tempdir().unwrap();
+    let db = Database::open(root.path()).unwrap();
+    let mappings = daily_mappings(&db);
     let import = || CostBasisVecs::forced_import(&db, Version::ONE, &mappings).unwrap();
     let mut vecs = import();
     let data = DayUrpds::repeated([(95, 20), (100, 30), (105, 10), (110, 20), (200, 20)])
@@ -170,5 +180,94 @@ fn density_series_persist_reopen_rewind_and_expose_normal_percent_units() {
                 .inner(),
             0
         );
+    }
+}
+
+#[test]
+fn age_bounds_backfill_persist_rewind_and_reset_together() {
+    let root = tempdir().unwrap();
+    let db = Database::open(&root.path().join("vecs")).unwrap();
+    let mappings = daily_mappings(&db);
+    let mut dates: EagerVec<PcoVec<Day1, Date>> =
+        EagerVec::forced_import(&db, "dates", Version::ONE).unwrap();
+    let first = Date::new(2026, 9, 12);
+    dates.push(first);
+    dates.push(Date::new(2026, 9, 13));
+    dates.write().unwrap();
+    let mut utxos = UTXOStates::new(root.path());
+    utxos.reset().unwrap();
+    utxos.age_range.under_1h.receive_utxo(
+        &SupplyState {
+            value: Sats::from(1_u64),
+            ..Default::default()
+        },
+        Cents::new(12345),
+    );
+    utxos.apply_pending();
+    utxos.write_urpds(first, root.path()).unwrap();
+    let expected = AgePriceBounds::read_if_exists(root.path(), first).unwrap();
+    let import = || AgePriceBoundsVecs::forced_import(&db, Version::ONE, &mappings).unwrap();
+    let mut vecs = import();
+    assert_eq!(vecs.prepare(Version::ONE, 2, 2).unwrap(), 0);
+    vecs.backfill(&dates, root.path(), 0, 2, &Exit::default())
+        .unwrap();
+    drop(vecs);
+    let mut vecs = import();
+    for (view, expected) in vecs.series.iter().zip(expected.iter()) {
+        assert_eq!(
+            view.min
+                .cents
+                .day1
+                .collect_one(Day1::from(0_usize))
+                .unwrap(),
+            expected.min
+        );
+        assert_eq!(
+            view.max
+                .cents
+                .views
+                .height
+                .collect_one(Height::ZERO)
+                .flatten()
+                .unwrap(),
+            expected.max
+        );
+        assert!(
+            view.min
+                .cents
+                .day1
+                .collect_one(Day1::from(1_usize))
+                .unwrap()
+                .is_nan()
+        );
+    }
+    assert_eq!(vecs.prepare(Version::ONE, 1, 2).unwrap(), 1);
+    let mut updated = AgePriceBounds::default();
+    updated.include(
+        AgeRangeId::Under1H,
+        CentsCompact::new(700),
+        Sats::from(1_u64),
+    );
+    vecs.push(&updated);
+    for vec in vecs.stored_vecs_mut() {
+        vec.write().unwrap();
+    }
+    for view in vecs.series.iter() {
+        assert_eq!(
+            view.max
+                .cents
+                .day1
+                .collect_one(Day1::from(1_usize))
+                .unwrap(),
+            Cents::new(700)
+        );
+    }
+    // A missing series rewinds all six, even if the date source is ahead.
+    vecs.stored.under_5m.min.truncate_if_needed_at(0).unwrap();
+    assert_eq!(vecs.prepare(Version::ONE, 2, 2).unwrap(), 0);
+    vecs.push(&updated);
+    assert_eq!(vecs.prepare(Version::TWO, 2, 2).unwrap(), 0);
+    for vec in vecs.stored_vecs_mut() {
+        assert_eq!(vec.len(), 0);
     }
 }

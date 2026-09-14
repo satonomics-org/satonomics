@@ -18,4 +18,6 @@ pub use statistics::{
     compute_rolling_distribution_from_starts,
 };
 pub use traits::{ComputedVecValue, FixedRatio, NumericValue};
-pub use weighted::{WeightedCohortContribution, WeightedCohortState, WeightedRatio};
+pub use weighted::{
+    WeightedCapitalizedPrice, WeightedCohortContribution, WeightedCohortState, WeightedRatio,
+};

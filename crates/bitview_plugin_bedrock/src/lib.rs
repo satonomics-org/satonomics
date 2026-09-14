@@ -35,6 +35,8 @@ macro_rules! impl_named_row_formattable {
     };
 }
 
+mod age_price_bounds;
+mod age_price_bounds_vecs;
 mod calibration;
 mod capitalized_price;
 mod capitalized_price_vecs;
@@ -55,6 +57,7 @@ mod modes;
 mod percentiles;
 mod price_band_id;
 mod price_bands;
+mod price_bounds;
 mod supply_density;
 mod supply_density_vecs;
 mod thresholds;
@@ -63,6 +66,8 @@ mod weighted;
 mod weighted_pair;
 mod weighted_urpd_names;
 
+use age_price_bounds::AgePriceBounds;
+use age_price_bounds_vecs::AgePriceBoundsVecs;
 use bitview_vecs::DailyPercentilesVecs;
 use calibration::Calibration;
 use capitalized_price_vecs::CapitalizedPriceVecs;
@@ -83,6 +88,7 @@ use modes::Modes;
 use percentiles::Percentiles;
 use price_band_id::PriceBandId;
 use price_bands::PriceBands;
+use price_bounds::PriceBounds;
 use supply_density::SupplyDensity;
 use supply_density_vecs::SupplyDensityVecs;
 use thresholds::Thresholds;
@@ -97,3 +103,5 @@ pub use vecs::Vecs;
 
 const STORAGE: PluginStorage = PluginStorage::new(PluginId::new("bedrock"), Version::new(14));
 pub const ID: PluginId = STORAGE.id();
+
+const WRITE_INTERVAL_DAYS: usize = 100;

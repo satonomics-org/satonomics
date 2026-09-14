@@ -5,7 +5,10 @@ use std::{array, ops::Range};
 use bitview_plugin_indexer::Lengths;
 use bitview_vecs::{DailyView, RepeatDay};
 use brk_exit::Exit;
-use brk_types::{CentsSats, PartsPerMillion32, RARITY_PERCENTILES, RARITY_PERCENTILES_LEN, Sats};
+use brk_types::{
+    CentsSats, CentsSquaredSats, PartsPerMillion32, RARITY_PERCENTILES, RARITY_PERCENTILES_LEN,
+    Sats,
+};
 use tempfile::tempdir;
 use vecdb::{
     AnyStoredVec, AnyVec, Budgeted, BytesVec, EagerVec, ImportableVec, PcoVec, ReadableVec,
@@ -17,10 +20,11 @@ use crate::test_common as common;
 
 struct Pipeline {
     caps: [BytesVec<Height, CentsSats>; 4],
+    capitalized_caps: [BytesVec<Height, CentsSquaredSats>; 3],
     supplies: [EagerVec<PcoVec<Height, Sats, Budgeted>>; 4],
     spot: EagerVec<PcoVec<Height, Cents, Budgeted>>,
     references: ReferencePrices,
-    components: [Component; 4],
+    components: [Component; 6],
     local: RarityMeterInner,
     cycle: RarityMeterInner,
     full: RarityMeterInner,
@@ -37,6 +41,8 @@ impl Pipeline {
             &references.under_6m,
             &references.over_4m,
             &references.over_6m,
+            &references.under_4m_capitalized_price,
+            &references.under_6m_capitalized_price,
         ];
         let components = array::from_fn(|index| {
             component::forced_import(
@@ -52,6 +58,10 @@ impl Pipeline {
         Self {
             caps: array::from_fn(|index| {
                 BytesVec::forced_import(db, &format!("cap_{index}"), Version::ONE).unwrap()
+            }),
+            capitalized_caps: array::from_fn(|index| {
+                BytesVec::forced_import(db, &format!("capitalized_cap_{index}"), Version::ONE)
+                    .unwrap()
             }),
             supplies: array::from_fn(|index| common::stored(db, &format!("supply_{index}"), [])),
             spot: common::stored(db, "spot", []),
@@ -74,9 +84,17 @@ impl Pipeline {
                 cap.push(CentsSats::new((100 + row as u128 * 10) * sats as u128));
                 supply.push(Sats::new(sats));
             }
+            for (cap, sats) in self.capitalized_caps.iter_mut().zip([10, 1, 2]) {
+                cap.push(CentsSquaredSats::new(
+                    (100 + row as u128 * 10).pow(2) * sats,
+                ));
+            }
             self.spot.push(Cents::new(150 + row as u64 * 100));
         }
         for cap in &mut self.caps {
+            cap.write().unwrap();
+        }
+        for cap in &mut self.capitalized_caps {
             cap.write().unwrap();
         }
         for supply in &mut self.supplies {
@@ -92,6 +110,7 @@ impl Pipeline {
                 starting_height,
                 self.caps.each_ref(),
                 self.supplies.each_ref(),
+                self.capitalized_caps.each_ref(),
                 &self.spot,
                 &exit,
             )
@@ -101,6 +120,8 @@ impl Pipeline {
             &self.references.under_6m,
             &self.references.over_4m,
             &self.references.over_6m,
+            &self.references.under_4m_capitalized_price,
+            &self.references.under_6m_capitalized_price,
         ];
         for (component, price) in self.components.iter_mut().zip(prices) {
             component::compute(
@@ -209,6 +230,9 @@ fn shortened_sources_recover_through_components_and_all_meters() {
             for cap in &mut pipeline.caps {
                 cap.truncate_if_needed_at(3).unwrap();
             }
+            for cap in &mut pipeline.capitalized_caps {
+                cap.truncate_if_needed_at(3).unwrap();
+            }
             for supply in &mut pipeline.supplies {
                 supply.truncate_if_needed_at(3).unwrap();
             }
@@ -218,6 +242,15 @@ fn shortened_sources_recover_through_components_and_all_meters() {
             pipeline.check(5);
             assert_eq!(
                 pipeline.references.under_4m.cents.height.collect_one_at(4),
+                Some(Cents::new(210))
+            );
+            assert_eq!(
+                pipeline
+                    .references
+                    .under_4m_capitalized_price
+                    .cents
+                    .height
+                    .collect_one_at(4),
                 Some(Cents::new(210))
             );
             pipeline.caps[0].truncate_if_needed_at(0).unwrap();

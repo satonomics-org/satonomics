@@ -29,4 +29,8 @@ pub struct AggregateSources<M: StorageMode = Rw> {
     /// eventually: coinflow capitalization divided by estimated mobile supply
     /// in BTC. Returns zero when mobile supply is zero.
     pub price: UTXOAggregate<CachedSeries<Height, Cents, M>>,
+    /// Creation price weighted by invested value and remaining-lifetime spending probability:
+    /// sum(weight × creation price² × sats) / sum(weight × creation price × sats).
+    /// Uses raw cost-basis moments; returns zero when weighted invested value is zero.
+    pub capitalized_price: UTXOAggregate<CachedSeries<Height, Cents, M>>,
 }

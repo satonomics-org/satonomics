@@ -7,7 +7,7 @@ use bitview_plugin_indexer::Indexer;
 use bitview_vecs::PerBlock;
 use brk_error::Result;
 use brk_exit::Exit;
-use brk_types::{BoundedRatio, Cents, Height, Sats, Version};
+use brk_types::{BoundedRatio, Cents, CentsSats, CentsSquaredSats, Height, Sats, Version};
 use vecdb::{AnyStoredVec, AnyVec, CachePolicy, EagerVec, PcoVec, ReadableVec, WritableVec};
 
 use super::{super::AgeRangeVecs, Sources, Vecs};
@@ -38,6 +38,9 @@ pub fn compute(
             .cents
             .height
     });
+    let cap_raw = AgeRange::from_fn(|id| id.select(&distribution.cohorts.realized.cap_raw.age));
+    let capitalized_cap_raw =
+        AgeRange::from_fn(|id| id.select(&distribution.cohorts.realized.capitalized_cap_raw.age));
     let weights = AgeRange::from_fn(|id| id.select(&age_range.activity_sources));
 
     vecs.sources.compute_primary(
@@ -45,6 +48,8 @@ pub fn compute(
         &supplies,
         &loss_supplies,
         &realized_caps,
+        &cap_raw,
+        &capitalized_cap_raw,
         &weights,
         &mut all_supply_in_loss_share.height,
         exit,
@@ -59,6 +64,8 @@ impl Sources {
         supplies: &AgeRange<&S>,
         loss_supplies: &AgeRange<&L>,
         realized_caps: &AgeRange<&C>,
+        cap_raw: &AgeRange<&impl ReadableVec<Height, CentsSats>>,
+        capitalized_cap_raw: &AgeRange<&impl ReadableVec<Height, CentsSquaredSats>>,
         weights: &AgeRange<&W>,
         all_supply_in_loss_share: &mut EagerVec<PcoVec<Height, BoundedRatio, impl CachePolicy>>,
         exit: &Exit,
@@ -75,6 +82,8 @@ impl Sources {
                 .map(|vec| vec.version())
                 .chain(loss_supplies.iter().map(|vec| vec.version()))
                 .chain(realized_caps.iter().map(|vec| vec.version()))
+                .chain(cap_raw.iter().map(|vec| vec.version()))
+                .chain(capitalized_cap_raw.iter().map(|vec| vec.version()))
                 .chain(weights.iter().map(|vec| vec.version())),
         );
 
@@ -101,6 +110,8 @@ impl Sources {
             .map(|vec| vec.len())
             .chain(loss_supplies.iter().map(|vec| vec.len()))
             .chain(realized_caps.iter().map(|vec| vec.len()))
+            .chain(cap_raw.iter().map(|vec| vec.len()))
+            .chain(capitalized_cap_raw.iter().map(|vec| vec.len()))
             .chain(weights.iter().map(|vec| vec.len()))
             .min()
             .unwrap_or_default();
@@ -121,6 +132,12 @@ impl Sources {
                 id.select(realized_caps)
                     .collect_range_at(aggregate_start, aggregate_chunk_end)
             });
+            let raw_batches =
+                AgeRange::from_fn(|id| id.select(cap_raw).collect_range_at(chunk_start, chunk_end));
+            let capitalized_batches = AgeRange::from_fn(|id| {
+                id.select(capitalized_cap_raw)
+                    .collect_range_at(chunk_start, chunk_end)
+            });
             let weight_batch =
                 AgeRange::from_fn(|id| id.select(weights).collect_range_at(chunk_start, chunk_end));
 
@@ -132,6 +149,11 @@ impl Sources {
                     } else {
                         &mut terms.long
                     };
+                    term.capitalized_price.add(
+                        id.select(&raw_batches)[offset],
+                        id.select(&capitalized_batches)[offset],
+                        id.select(&weight_batch)[offset],
+                    );
                     term.add(
                         id.select(&supply_batches)[offset],
                         id.select(&loss_batches)[offset],
@@ -175,6 +197,18 @@ impl Sources {
             (&mut self.awake_price.all, all.realized_price()),
             (&mut self.awake_price.sth, terms.short.realized_price()),
             (&mut self.awake_price.lth, terms.long.realized_price()),
+            (
+                &mut self.awake_capitalized_price.all,
+                all.capitalized_price.value(),
+            ),
+            (
+                &mut self.awake_capitalized_price.sth,
+                terms.short.capitalized_price.value(),
+            ),
+            (
+                &mut self.awake_capitalized_price.lth,
+                terms.long.capitalized_price.value(),
+            ),
         ] {
             target.push(value);
         }
@@ -200,6 +234,9 @@ impl Sources {
             &mut self.awake_price.all,
             &mut self.awake_price.sth,
             &mut self.awake_price.lth,
+            &mut self.awake_capitalized_price.all,
+            &mut self.awake_capitalized_price.sth,
+            &mut self.awake_capitalized_price.lth,
             &mut self.supply_in_loss_share.short,
             &mut self.supply_in_loss_share.long,
         ]
@@ -211,7 +248,7 @@ mod tests {
     use crate::test_cache::init_cache;
 
     use tempfile::tempdir;
-    use vecdb::{Database, ImportableVec};
+    use vecdb::{BytesVec, Database, ImportableVec};
 
     use super::*;
 
@@ -232,6 +269,11 @@ mod tests {
             PcoVec::<Height, Sats>::forced_import(&db, "supply", Version::ONE).unwrap();
         let mut loss = PcoVec::<Height, Sats>::forced_import(&db, "loss", Version::ONE).unwrap();
         let mut cap = PcoVec::<Height, Cents>::forced_import(&db, "cap", Version::ONE).unwrap();
+        let mut raw =
+            BytesVec::<Height, CentsSats>::forced_import(&db, "raw", Version::ONE).unwrap();
+        let mut capitalized =
+            BytesVec::<Height, CentsSquaredSats>::forced_import(&db, "capitalized", Version::ONE)
+                .unwrap();
         let mut weights =
             PcoVec::<Height, BoundedRatio>::forced_import(&db, "weights", Version::ONE).unwrap();
         let length = WRITE_INTERVAL + 3;
@@ -241,11 +283,15 @@ mod tests {
             if height < length - 1 {
                 loss.push(Sats::from(20_u64));
                 cap.push(Cents::from(1_000_u64));
+                raw.push(CentsSats::new(1_000 * Sats::ONE_BTC_U128));
+                capitalized.push(CentsSquaredSats::new(3_000 * 1_000 * Sats::ONE_BTC_U128));
             }
         }
         supply.write().unwrap();
         loss.write().unwrap();
         cap.write().unwrap();
+        raw.write().unwrap();
+        capitalized.write().unwrap();
         weights.write().unwrap();
 
         for rewrite in [false, true] {
@@ -256,6 +302,18 @@ mod tests {
                     weights.push(BoundedRatio::ONE);
                 }
                 weights.write().unwrap();
+                capitalized.truncate_if_needed_at(start).unwrap();
+                for _ in start..length - 1 {
+                    capitalized.push(CentsSquaredSats::new(4_000 * 1_000 * Sats::ONE_BTC_U128));
+                }
+                capitalized.write().unwrap();
+                // A missing new series must backfill even when the existing
+                // supply/price sources and the indexer are already ahead.
+                sources
+                    .awake_capitalized_price
+                    .sth
+                    .truncate_if_needed_at(0)
+                    .unwrap();
             }
             sources
                 .compute_primary(
@@ -263,6 +321,8 @@ mod tests {
                     &AgeRange::from_fn(|_| &supply),
                     &AgeRange::from_fn(|_| &loss),
                     &AgeRange::from_fn(|_| &cap),
+                    &AgeRange::from_fn(|_| &raw),
+                    &AgeRange::from_fn(|_| &capitalized),
                     &AgeRange::from_fn(|_| &weights),
                     &mut loss_share,
                     &Exit::default(),
@@ -283,6 +343,15 @@ mod tests {
                 };
                 let (awake, _) = WeightedCohortState::split_supply(Sats::from(100_u64), weight);
                 if height < length - 1 {
+                    for price in sources.awake_capitalized_price.iter() {
+                        assert_eq!(price.len(), length - 1);
+                        let expected = if rewrite && height >= start {
+                            4_000
+                        } else {
+                            3_000
+                        };
+                        assert_eq!(price.collect_one_at(height).unwrap(), Cents::new(expected));
+                    }
                     let short = sources.awake_supply.sth.collect_one_at(height).unwrap();
                     let long = sources.awake_supply.lth.collect_one_at(height).unwrap();
                     assert_eq!(

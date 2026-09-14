@@ -251,6 +251,32 @@ export function createCointimeSection() {
       },
 
       {
+        name: "Capitalized Price",
+        tree: [
+          {
+            name: "Compare",
+            title: "Awake Capitalized Price by Holder Term",
+            top: awakeCohorts.map(({ name, color, tree }) =>
+              price({ series: tree.awake.capitalizedPrice, name, color }),
+            ),
+          },
+          ...awakeCohorts.map(({ name, color, tree }) => {
+            const title =
+              name === "All"
+                ? "Awake Capitalized Price"
+                : `${name} Awake Capitalized Price`;
+            const [chart] = simplePriceRatioTree({
+              pattern: tree.awake.capitalizedPrice,
+              title,
+              legend: name,
+              color,
+            });
+            return { ...chart, name };
+          }),
+        ],
+      },
+
+      {
         name: "Capitalization",
         tree: [
           {

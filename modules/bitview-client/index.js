@@ -2570,6 +2570,69 @@ function createSeriesPattern35(client, name) { return /** @type {SeriesPattern35
  */
 
 /**
+ * @typedef {Object} CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern
+ * @property {SeriesPattern1<Cents>} cents
+ * @property {PpmPriceRatioPattern} pct01
+ * @property {PpmPriceRatioPattern} pct05
+ * @property {PpmPriceRatioPattern} pct1
+ * @property {PpmPriceRatioPattern} pct10
+ * @property {PpmPriceRatioPattern} pct2
+ * @property {PpmPriceRatioPattern} pct20
+ * @property {PpmPriceRatioPattern} pct30
+ * @property {PpmPriceRatioPattern} pct40
+ * @property {PpmPriceRatioPattern} pct5
+ * @property {PpmPriceRatioPattern} pct50
+ * @property {PpmPriceRatioPattern} pct60
+ * @property {PpmPriceRatioPattern} pct70
+ * @property {PpmPriceRatioPattern} pct80
+ * @property {PpmPriceRatioPattern} pct90
+ * @property {PpmPriceRatioPattern} pct95
+ * @property {PpmPriceRatioPattern} pct98
+ * @property {PpmPriceRatioPattern} pct99
+ * @property {PpmPriceRatioPattern} pct995
+ * @property {PpmPriceRatioPattern} pct999
+ * @property {SeriesPattern1<PriceRatio>} ppm
+ * @property {SeriesPattern1<StoredF32>} ratio
+ * @property {SeriesPattern1<SatsFract>} sats
+ * @property {SeriesPattern1<Dollars>} usd
+ */
+
+/**
+ * Create a CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern pattern node
+ * @param {BitviewClient} client
+ * @param {string} acc - Accumulated series name
+ * @returns {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern}
+ */
+function createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, acc) {
+  return {
+    cents: createSeriesPattern1(client, _m(acc, 'cents')),
+    pct01: createPpmPriceRatioPattern(client, acc, 'pct0_1'),
+    pct05: createPpmPriceRatioPattern(client, acc, 'pct0_5'),
+    pct1: createPpmPriceRatioPattern(client, acc, 'pct1'),
+    pct10: createPpmPriceRatioPattern(client, acc, 'pct10'),
+    pct2: createPpmPriceRatioPattern(client, acc, 'pct2'),
+    pct20: createPpmPriceRatioPattern(client, acc, 'pct20'),
+    pct30: createPpmPriceRatioPattern(client, acc, 'pct30'),
+    pct40: createPpmPriceRatioPattern(client, acc, 'pct40'),
+    pct5: createPpmPriceRatioPattern(client, acc, 'pct5'),
+    pct50: createPpmPriceRatioPattern(client, acc, 'pct50'),
+    pct60: createPpmPriceRatioPattern(client, acc, 'pct60'),
+    pct70: createPpmPriceRatioPattern(client, acc, 'pct70'),
+    pct80: createPpmPriceRatioPattern(client, acc, 'pct80'),
+    pct90: createPpmPriceRatioPattern(client, acc, 'pct90'),
+    pct95: createPpmPriceRatioPattern(client, acc, 'pct95'),
+    pct98: createPpmPriceRatioPattern(client, acc, 'pct98'),
+    pct99: createPpmPriceRatioPattern(client, acc, 'pct99'),
+    pct995: createPpmPriceRatioPattern(client, acc, 'pct99_5'),
+    pct999: createPpmPriceRatioPattern(client, acc, 'pct99_9'),
+    ppm: createSeriesPattern1(client, _m(acc, 'ratio_ppm')),
+    ratio: createSeriesPattern1(client, _m(acc, 'ratio')),
+    sats: createSeriesPattern1(client, _m(acc, 'sats')),
+    usd: createSeriesPattern1(client, acc),
+  };
+}
+
+/**
  * @typedef {Object} _10y12y18m1d1h1m1w1y2m2y3m3y4m4y5m5y6m6y7y8y9mOverUnderPattern
  * @property {AverageBlockCumulativeSumPattern<StoredF64>} _10yTo12y
  * @property {AverageBlockCumulativeSumPattern<StoredF64>} _12yTo15y
@@ -4459,6 +4522,15 @@ function createBtcCentsDeltaSatsUsdPattern(client, acc) {
  */
 
 /**
+ * @typedef {Object} CapCapitalizedHorizonPriceSupplyPattern
+ * @property {CentsUsdPattern} cap
+ * @property {CentsPpmRatioSatsUsdPattern} capitalizedPrice
+ * @property {_1m1y2y3m4y6m8yPattern} horizon
+ * @property {CentsPpmRatioSatsUsdPattern} price
+ * @property {ImmobileMobilePattern2} supply
+ */
+
+/**
  * @typedef {Object} CentsPpmRatioSatsUsdPattern
  * @property {SeriesPattern1<Cents>} cents
  * @property {SeriesPattern1<PriceRatio>} ppm
@@ -4948,11 +5020,11 @@ function createBtcCentsSatsUsdPattern3(client, acc) {
 }
 
 /**
- * @typedef {Object} CapHorizonPriceSupplyPattern
+ * @typedef {Object} CapCapitalizedPriceSupplyPattern
  * @property {CentsUsdPattern} cap
- * @property {_1m1y2y3m4y6m8yPattern} horizon
+ * @property {CentsPpmRatioSatsUsdPattern} capitalizedPrice
  * @property {CentsPpmRatioSatsUsdPattern} price
- * @property {ImmobileMobilePattern2} supply
+ * @property {BtcCentsInSatsUsdPattern} supply
  */
 
 /**
@@ -5229,13 +5301,6 @@ function createBlocksDominanceRewardsPattern(client, acc) {
     rewards: createAverageBlockCumulativeSumPattern2(client, _m(acc, 'rewards')),
   };
 }
-
-/**
- * @typedef {Object} CapPriceSupplyPattern
- * @property {CentsUsdPattern} cap
- * @property {CentsPpmRatioSatsUsdPattern} price
- * @property {BtcCentsInSatsUsdPattern} supply
- */
 
 /**
  * @typedef {Object} CentsSatsUsdPattern3
@@ -5620,7 +5685,7 @@ function createAllSthPattern2(client, acc) {
 
 /**
  * @typedef {Object} AwakeDormantPattern2
- * @property {CapPriceSupplyPattern} awake
+ * @property {CapCapitalizedPriceSupplyPattern} awake
  * @property {SupplyPattern2} dormant
  */
 
@@ -6109,6 +6174,25 @@ function createLongShortPattern12(client, acc) {
   return {
     long: createPercentPpmRatioPattern2(client, _p('lth', acc)),
     short: createPercentPpmRatioPattern2(client, _p('sth', acc)),
+  };
+}
+
+/**
+ * @typedef {Object} MaxMinPattern
+ * @property {CentsSatsUsdPattern} max
+ * @property {CentsSatsUsdPattern} min
+ */
+
+/**
+ * Create a MaxMinPattern pattern node
+ * @param {BitviewClient} client
+ * @param {string} acc - Accumulated series name
+ * @returns {MaxMinPattern}
+ */
+function createMaxMinPattern(client, acc) {
+  return {
+    max: createCentsSatsUsdPattern(client, _m(acc, 'max')),
+    min: createCentsSatsUsdPattern(client, _m(acc, 'min')),
   };
 }
 
@@ -7637,6 +7721,7 @@ function createTermPattern(client, acc) {
  * @property {SeriesTree_Cointime_Awake_Supply} supply
  * @property {CentsUsdPattern} cap
  * @property {CentsPpmRatioSatsUsdPattern} price
+ * @property {CentsPpmRatioSatsUsdPattern} capitalizedPrice
  */
 
 /**
@@ -7659,6 +7744,7 @@ function createTermPattern(client, acc) {
  * @property {SeriesTree_Cointime_Sth_Awake_Supply} supply
  * @property {CentsUsdPattern} cap
  * @property {CentsPpmRatioSatsUsdPattern} price
+ * @property {CentsPpmRatioSatsUsdPattern} capitalizedPrice
  */
 
 /**
@@ -7681,6 +7767,7 @@ function createTermPattern(client, acc) {
  * @property {SeriesTree_Cointime_Lth_Awake_Supply} supply
  * @property {CentsUsdPattern} cap
  * @property {CentsPpmRatioSatsUsdPattern} price
+ * @property {CentsPpmRatioSatsUsdPattern} capitalizedPrice
  */
 
 /**
@@ -7765,6 +7852,7 @@ function createTermPattern(client, acc) {
  * @property {_1m1y2y3m4y6m8yPattern} horizon
  * @property {CentsUsdPattern} cap
  * @property {CentsPpmRatioSatsUsdPattern} price
+ * @property {CentsPpmRatioSatsUsdPattern} capitalizedPrice
  * @property {SeriesTree_Coinflow_Sth} sth
  * @property {SeriesTree_Coinflow_Lth} lth
  */
@@ -7939,6 +8027,7 @@ function createTermPattern(client, acc) {
  * @property {_1m1y2y3m4y6m8yPattern} horizon
  * @property {CentsUsdPattern} cap
  * @property {CentsPpmRatioSatsUsdPattern} price
+ * @property {CentsPpmRatioSatsUsdPattern} capitalizedPrice
  */
 
 /**
@@ -7962,6 +8051,7 @@ function createTermPattern(client, acc) {
  * @property {_1m1y2y3m4y6m8yPattern} horizon
  * @property {CentsUsdPattern} cap
  * @property {CentsPpmRatioSatsUsdPattern} price
+ * @property {CentsPpmRatioSatsUsdPattern} capitalizedPrice
  */
 
 /**
@@ -7997,10 +8087,18 @@ function createTermPattern(client, acc) {
 
 /**
  * @typedef {Object} SeriesTree_Bedrock_CostBasis
+ * @property {SeriesTree_Bedrock_CostBasis_AgeBounds} ageBounds
  * @property {SeriesTree_Bedrock_CostBasis_PerCoin} perCoin
  * @property {SeriesTree_Bedrock_CostBasis_PerDollar} perDollar
  * @property {SeriesTree_Bedrock_CostBasis_SupplyDensity} supplyDensity
  * @property {CoinflowCointimePattern2} supplyDensity10pct
+ */
+
+/**
+ * @typedef {Object} SeriesTree_Bedrock_CostBasis_AgeBounds
+ * @property {MaxMinPattern} under4m
+ * @property {MaxMinPattern} under5m
+ * @property {MaxMinPattern} under6m
  */
 
 /**
@@ -8041,8 +8139,11 @@ function createTermPattern(client, acc) {
  * @property {SeriesTree_RarityMeter_Components} components
  * @property {SeriesTree_RarityMeter_Extremes} extremes
  * @property {IndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern} full
+ * @property {IndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern} fullV2
  * @property {IndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern} local
+ * @property {IndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern} localV2
  * @property {IndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern} cycle
+ * @property {IndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern} cycleV2
  */
 
 /**
@@ -8051,12 +8152,24 @@ function createTermPattern(client, acc) {
  * @property {CentsPpmRatioSatsUsdPattern} under6m
  * @property {CentsPpmRatioSatsUsdPattern} over4m
  * @property {CentsPpmRatioSatsUsdPattern} over6m
+ * @property {CentsPpmRatioSatsUsdPattern} under4mCapitalizedPrice
+ * @property {CentsPpmRatioSatsUsdPattern} under6mCapitalizedPrice
  */
 
 /**
  * @typedef {Object} SeriesTree_RarityMeter_Components
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} realizedPrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} capitalizedPrice
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} medianPriceBtcWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} medianPriceUsdWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} sthMedianPriceBtcWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} sthMedianPriceUsdWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} lthMedianPriceBtcWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} lthMedianPriceUsdWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} cointimeMedianPriceBtcWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} cointimeMedianPriceUsdWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} coinflowMedianPriceBtcWeighted
+ * @property {CentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern} coinflowMedianPriceUsdWeighted
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} sthRealizedPrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} sthCapitalizedPrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} lthRealizedPrice
@@ -8065,10 +8178,13 @@ function createTermPattern(client, acc) {
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} over4mRealizedPrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} under4mRealizedPrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} under6mRealizedPrice
+ * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} under4mCapitalizedPrice
+ * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} under6mCapitalizedPrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} vaultedPrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} activePrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} trueMarketMeanPrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} cointimePrice
+ * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} awakePrice
  * @property {Pct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern} coinflowPrice
  */
 
@@ -13686,6 +13802,7 @@ class BitviewClient extends BitviewClientBase {
           })); },
           cap: createCentsUsdPattern(client, 'awake_cap'),
           price: createCentsPpmRatioSatsUsdPattern(client, 'awake_price'),
+          capitalizedPrice: createCentsPpmRatioSatsUsdPattern(client, 'awake_capitalized_price'),
         })); },
         dormant: createSupplyPattern2(client, 'dormant_supply'),
         get sth() { return _lazy(this, 'sth', () => ({
@@ -13699,6 +13816,7 @@ class BitviewClient extends BitviewClientBase {
             })); },
             cap: createCentsUsdPattern(client, 'sth_awake_cap'),
             price: createCentsPpmRatioSatsUsdPattern(client, 'sth_awake_price'),
+            capitalizedPrice: createCentsPpmRatioSatsUsdPattern(client, 'sth_awake_capitalized_price'),
           })); },
           dormant: createSupplyPattern2(client, 'sth_dormant_supply'),
         })); },
@@ -13713,6 +13831,7 @@ class BitviewClient extends BitviewClientBase {
             })); },
             cap: createCentsUsdPattern(client, 'lth_awake_cap'),
             price: createCentsPpmRatioSatsUsdPattern(client, 'lth_awake_price'),
+            capitalizedPrice: createCentsPpmRatioSatsUsdPattern(client, 'lth_awake_capitalized_price'),
           })); },
           dormant: createSupplyPattern2(client, 'lth_dormant_supply'),
         })); },
@@ -13905,6 +14024,7 @@ class BitviewClient extends BitviewClientBase {
         horizon: create_1m1y2y3m4y6m8yPattern(client, 'coinflow'),
         cap: createCentsUsdPattern(client, 'coinflow_cap'),
         price: createCentsPpmRatioSatsUsdPattern(client, 'coinflow_price'),
+        capitalizedPrice: createCentsPpmRatioSatsUsdPattern(client, 'coinflow_capitalized_price'),
         get sth() { return _lazy(this, 'sth', () => ({
           get supply() { return _lazy(this, 'supply', () => ({
             get mobile() { return _lazy(this, 'mobile', () => ({
@@ -13919,6 +14039,7 @@ class BitviewClient extends BitviewClientBase {
           horizon: create_1m1y2y3m4y6m8yPattern(client, 'sth_coinflow'),
           cap: createCentsUsdPattern(client, 'sth_coinflow_cap'),
           price: createCentsPpmRatioSatsUsdPattern(client, 'sth_coinflow_price'),
+          capitalizedPrice: createCentsPpmRatioSatsUsdPattern(client, 'sth_coinflow_capitalized_price'),
         })); },
         get lth() { return _lazy(this, 'lth', () => ({
           get supply() { return _lazy(this, 'supply', () => ({
@@ -13934,10 +14055,16 @@ class BitviewClient extends BitviewClientBase {
           horizon: create_1m1y2y3m4y6m8yPattern(client, 'lth_coinflow'),
           cap: createCentsUsdPattern(client, 'lth_coinflow_cap'),
           price: createCentsPpmRatioSatsUsdPattern(client, 'lth_coinflow_price'),
+          capitalizedPrice: createCentsPpmRatioSatsUsdPattern(client, 'lth_coinflow_capitalized_price'),
         })); },
       })); },
       get bedrock() { return _lazy(this, 'bedrock', () => ({
         get costBasis() { return _lazy(this, 'costBasis', () => ({
+          get ageBounds() { return _lazy(this, 'ageBounds', () => ({
+            under4m: createMaxMinPattern(client, 'bedrock_under_4m_cost_basis'),
+            under5m: createMaxMinPattern(client, 'bedrock_under_5m_cost_basis'),
+            under6m: createMaxMinPattern(client, 'bedrock_under_6m_cost_basis'),
+          })); },
           get perCoin() { return _lazy(this, 'perCoin', () => ({
             cointime: createPct05Pct10Pct15Pct20Pct25Pct30Pct35Pct40Pct45Pct50Pct55Pct60Pct65Pct70Pct75Pct80Pct85Pct90Pct95Pattern(client, 'bedrock_cointime_cost_basis_per_coin'),
             coinflow: createPct05Pct10Pct15Pct20Pct25Pct30Pct35Pct40Pct45Pct50Pct55Pct60Pct65Pct70Pct75Pct80Pct85Pct90Pct95Pattern(client, 'bedrock_coinflow_cost_basis_per_coin'),
@@ -13953,8 +14080,8 @@ class BitviewClient extends BitviewClientBase {
           supplyDensity10pct: createCoinflowCointimePattern2(client, 'bedrock', '10pct'),
         })); },
         get capitalizedPrice() { return _lazy(this, 'capitalizedPrice', () => ({
-          awake: createAllLthSthPattern(client, 'awake_capitalized_price'),
-          coinflow: createAllLthSthPattern(client, 'coinflow_capitalized_price'),
+          awake: createAllLthSthPattern(client, 'awake_urpd_capitalized_price'),
+          coinflow: createAllLthSthPattern(client, 'coinflow_urpd_capitalized_price'),
         })); },
         raw: createFloorLevelLossPattern(client, 'bedrock_raw'),
         cointime: createFloorLevelLossPattern(client, 'bedrock_cointime'),
@@ -13979,10 +14106,22 @@ class BitviewClient extends BitviewClientBase {
           under6m: createCentsPpmRatioSatsUsdPattern(client, 'rarity_meter_under_6m_realized_price'),
           over4m: createCentsPpmRatioSatsUsdPattern(client, 'rarity_meter_over_4m_realized_price'),
           over6m: createCentsPpmRatioSatsUsdPattern(client, 'rarity_meter_over_6m_realized_price'),
+          under4mCapitalizedPrice: createCentsPpmRatioSatsUsdPattern(client, 'rarity_meter_under_4m_capitalized_price'),
+          under6mCapitalizedPrice: createCentsPpmRatioSatsUsdPattern(client, 'rarity_meter_under_6m_capitalized_price'),
         })); },
         get components() { return _lazy(this, 'components', () => ({
           realizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'realized_price'),
           capitalizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'capitalized_price'),
+          medianPriceBtcWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'median_price_btc_weighted'),
+          medianPriceUsdWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'median_price_usd_weighted'),
+          sthMedianPriceBtcWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'sth_median_price_btc_weighted'),
+          sthMedianPriceUsdWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'sth_median_price_usd_weighted'),
+          lthMedianPriceBtcWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'lth_median_price_btc_weighted'),
+          lthMedianPriceUsdWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'lth_median_price_usd_weighted'),
+          cointimeMedianPriceBtcWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'cointime_median_price_btc_weighted'),
+          cointimeMedianPriceUsdWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'cointime_median_price_usd_weighted'),
+          coinflowMedianPriceBtcWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'coinflow_median_price_btc_weighted'),
+          coinflowMedianPriceUsdWeighted: createCentsPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99PpmRatioSatsUsdPattern(client, 'coinflow_median_price_usd_weighted'),
           sthRealizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'sth_realized_price'),
           sthCapitalizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'sth_capitalized_price'),
           lthRealizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'lth_realized_price'),
@@ -13991,10 +14130,13 @@ class BitviewClient extends BitviewClientBase {
           over4mRealizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'over_4m_realized_price'),
           under4mRealizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'under_4m_realized_price'),
           under6mRealizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'under_6m_realized_price'),
+          under4mCapitalizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'under_4m_capitalized_price'),
+          under6mCapitalizedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'under_6m_capitalized_price'),
           vaultedPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'vaulted_price'),
           activePrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'active_price'),
           trueMarketMeanPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'true_market_mean_price'),
           cointimePrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'cointime_price'),
+          awakePrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'awake_price'),
           coinflowPrice: createPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99Pattern(client, 'coinflow_price'),
         })); },
         get extremes() { return _lazy(this, 'extremes', () => ({
@@ -14017,8 +14159,11 @@ class BitviewClient extends BitviewClientBase {
           })); },
         })); },
         full: createIndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern(client, 'rarity_meter'),
+        fullV2: createIndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern(client, 'rarity_meter_v2'),
         local: createIndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern(client, 'local_rarity_meter'),
+        localV2: createIndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern(client, 'local_rarity_meter_v2'),
         cycle: createIndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern(client, 'cycle_rarity_meter'),
+        cycleV2: createIndexPct0Pct1Pct10Pct2Pct20Pct30Pct40Pct5Pct50Pct60Pct70Pct80Pct90Pct95Pct98Pct99ScorePattern(client, 'cycle_rarity_meter_v2'),
       })); },
       get constants() { return _lazy(this, 'constants', () => ({
         _0: createSeriesPattern1(client, 'constant_0'),

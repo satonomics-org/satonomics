@@ -20,6 +20,10 @@ pub struct Sources<M: StorageMode = Rw> {
     /// Wakefulness-weighted mean creation price: awake capitalization divided
     /// by awake supply in BTC. Returns zero when awake supply is zero.
     pub awake_price: UTXOAggregate<CachedSeries<Height, Cents, M>>,
+    /// Creation price weighted by invested value and wakefulness:
+    /// sum(weight × creation price² × sats) / sum(weight × creation price × sats).
+    /// Uses raw cost-basis moments; returns zero when weighted invested value is zero.
+    pub awake_capitalized_price: UTXOAggregate<CachedSeries<Height, Cents, M>>,
     /// Share of awake supply that is in loss: the sum of supply in loss
     /// multiplied by wakefulness divided by the sum of total supply multiplied
     /// by wakefulness. Returns NaN when the weighted supply is zero.

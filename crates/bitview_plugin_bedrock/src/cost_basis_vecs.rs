@@ -4,10 +4,13 @@ use brk_error::Result;
 use brk_types::Version;
 use vecdb::{AnyStoredVec, Database, Rw, StorageMode};
 
-use crate::{CostBasisData, DailyPercentilesVecs, SupplyDensityVecs, WeightedPair};
+use crate::{
+    AgePriceBoundsVecs, CostBasisData, DailyPercentilesVecs, SupplyDensityVecs, WeightedPair,
+};
 
 #[derive(Traversable)]
 pub struct CostBasisVecs<M: StorageMode = Rw> {
+    pub age_bounds: AgePriceBoundsVecs<M>,
     pub per_coin: WeightedPair<DailyPercentilesVecs<M>>,
     pub per_dollar: WeightedPair<DailyPercentilesVecs<M>>,
     /// Daily density of each mode-weighted URPD within ±5% of closing spot. Undefined
@@ -52,6 +55,7 @@ impl CostBasisVecs {
             })
         };
         Ok(Self {
+            age_bounds: AgePriceBoundsVecs::forced_import(db, version, mappings)?,
             per_coin: Self::import_weighting(db, "per_coin", version, mappings)?,
             per_dollar: Self::import_weighting(db, "per_dollar", version, mappings)?,
             supply_density: import_density("")?,

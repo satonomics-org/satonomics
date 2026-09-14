@@ -773,7 +773,7 @@ function ratioBands(bands) {
  * @param {string} args.legend
  * @param {Color} [args.color]
  * @param {FetchedPriceSeriesBlueprint[]} [args.priceReferences]
- * @returns {PartialOptionsTree}
+ * @returns {PartialChartOption[]}
  */
 export function priceRatioPercentilesTree({
   pattern,

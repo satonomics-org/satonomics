@@ -255,6 +255,7 @@ impl DefaultPlugins {
                         context,
                         &mappings,
                         &distribution,
+                        &bedrock,
                         &cointime,
                         &coinflow,
                     )?))

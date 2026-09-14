@@ -1,7 +1,7 @@
 use brk_types::{BoundedRatio, Cents, Sats, StoredF64};
 use vecdb::unlikely;
 
-use super::{WeightedCohortContribution, WeightedRatio};
+use super::{WeightedCapitalizedPrice, WeightedCohortContribution, WeightedRatio};
 
 #[derive(Clone, Copy, Default)]
 pub struct WeightedCohortState {
@@ -9,6 +9,7 @@ pub struct WeightedCohortState {
     pub complement_supply: Sats,
     pub weighted_cap: Cents,
     pub supply_in_loss: WeightedRatio,
+    pub capitalized_price: WeightedCapitalizedPrice,
 }
 
 impl WeightedCohortState {
@@ -58,6 +59,7 @@ impl WeightedCohortState {
         self.complement_supply += other.complement_supply;
         self.weighted_cap += other.weighted_cap;
         self.supply_in_loss.merge(other.supply_in_loss);
+        self.capitalized_price.merge(other.capitalized_price);
         self
     }
 

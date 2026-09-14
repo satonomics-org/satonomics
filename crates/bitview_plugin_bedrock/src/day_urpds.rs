@@ -13,7 +13,7 @@ use brk_error::Result;
 use brk_types::{Cents, CentsCompact, Date, Sats, UrpdRaw, UrpdWeight, Version};
 
 use super::{ModeId, ModeWeights, WeightedModeId, WeightedModes, WeightedPair, WeightedUrpdNames};
-use crate::{CostBasisData, capitalized_price};
+use crate::{AgePriceBounds, CostBasisData, PriceBounds, capitalized_price};
 
 const VERSION_FILE: &str = "bedrock_urpd.version";
 
@@ -32,6 +32,7 @@ impl Default for WeightedMasses {
 }
 
 pub struct DayUrpds {
+    pub age_price_bounds: AgePriceBounds<PriceBounds<Cents>>,
     raw: UrpdRaw,
     all: WeightedModes<UrpdRaw>,
     term: ByTerm<WeightedPair<UrpdRaw>>,
@@ -109,7 +110,12 @@ impl DayUrpds {
             .into_iter()
             .map(|(price, sats)| (CentsCompact::new(price), Sats::from(sats)))
             .collect::<BTreeMap<_, _>>();
+        let mut age_price_bounds = AgePriceBounds::default();
+        for (&price, &sats) in &map {
+            age_price_bounds.include(AgeRangeId::Under1H, price, sats);
+        }
         Self {
+            age_price_bounds,
             raw: UrpdRaw { map: map.clone() },
             all: WeightedModes::from_fn(|_| UrpdRaw { map: map.clone() }),
             term: ByTerm {
@@ -202,16 +208,18 @@ impl DayUrpds {
         let sources = AgeRangeUrpds::read(distribution_states_path, date)?;
         let raw = sources.aggregate(UTXOAggregateId::All)?;
         let mut weighted = BTreeMap::new();
+        let mut age_price_bounds = AgePriceBounds::default();
 
         for &age in AgeRangeId::ALL {
             let is_short = age.term() == Term::Sth;
 
             for &(price, sats) in sources.get(age) {
+                age_price_bounds.include(age, price, sats);
                 Self::add_weighted_entry(&mut weighted, price, sats, age, is_short, weights);
             }
         }
 
-        Ok(Self::finalize(raw, weighted))
+        Ok(Self::finalize(raw, weighted, age_price_bounds))
     }
 
     pub fn current(utxos: &UTXOStates, weights: &ModeWeights) -> Self {
@@ -231,14 +239,16 @@ impl DayUrpds {
     ) -> Self {
         let mut raw = UrpdRaw::default();
         let mut weighted = BTreeMap::new();
+        let mut age_price_bounds = AgePriceBounds::default();
 
         for (age, price, sats) in entries {
+            age_price_bounds.include(age, price, sats);
             *raw.map.entry(price).or_default() += sats;
             let is_short = age.term() == Term::Sth;
             Self::add_weighted_entry(&mut weighted, price, sats, age, is_short, weights);
         }
 
-        Self::finalize(raw, weighted)
+        Self::finalize(raw, weighted, age_price_bounds)
     }
 
     pub fn write(&self, states_path: &Path, names: &WeightedUrpdNames, date: Date) -> Result<()> {
@@ -317,7 +327,11 @@ impl DayUrpds {
         }
     }
 
-    fn finalize(raw: UrpdRaw, weighted: BTreeMap<CentsCompact, WeightedMasses>) -> Self {
+    fn finalize(
+        raw: UrpdRaw,
+        weighted: BTreeMap<CentsCompact, WeightedMasses>,
+        age_price_bounds: AgePriceBounds<PriceBounds<Cents>>,
+    ) -> Self {
         let mut all = WeightedModes::from_fn(|_| UrpdRaw::default());
         let mut term = ByTerm::<WeightedPair<UrpdRaw>>::default();
 
@@ -330,7 +344,12 @@ impl DayUrpds {
             Self::insert_pair(price, &mut term.long, &masses.term.long);
         }
 
-        Self { raw, all, term }
+        Self {
+            raw,
+            all,
+            term,
+            age_price_bounds,
+        }
     }
 
     fn insert_pair(

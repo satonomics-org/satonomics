@@ -5,7 +5,7 @@ use bitview_traversable::Traversable;
 use bitview_vecs::IndexSources;
 use brk_error::Result;
 use brk_exit::Exit;
-use brk_types::{Cents, CentsSats, Height, Sats, Version};
+use brk_types::{Cents, CentsSats, CentsSquaredSats, Height, Sats, Version};
 use vecdb::{AnyStoredVec, AnyVec, Database, ReadableVec, Rw, StorageMode, WritableVec};
 
 use crate::{COMPUTE_BATCH_SIZE, reference_price::ReferencePrice};
@@ -14,8 +14,7 @@ use crate::{COMPUTE_BATCH_SIZE, reference_price::ReferencePrice};
 #[path = "reference_prices_tests.rs"]
 mod tests;
 
-/// The four age-threshold prices needed by this model, reconstructed from
-/// raw capitalization and supply before rounding once to cents.
+/// Age-threshold prices reconstructed from raw totals before rounding once to cents.
 #[derive(Traversable)]
 pub struct ReferencePrices<M: StorageMode = Rw> {
     /// Realized price of UTXOs younger than 120 days.
@@ -26,6 +25,10 @@ pub struct ReferencePrices<M: StorageMode = Rw> {
     pub over_4m: ReferencePrice<M>,
     /// Realized price of UTXOs at least 180 days old.
     pub over_6m: ReferencePrice<M>,
+    /// Capitalized price of UTXOs younger than 120 days.
+    pub under_4m_capitalized_price: ReferencePrice<M>,
+    /// Capitalized price of UTXOs younger than 180 days.
+    pub under_6m_capitalized_price: ReferencePrice<M>,
 }
 
 impl ReferencePrices {
@@ -33,25 +36,29 @@ impl ReferencePrices {
         let import = |name| {
             ReferencePrice::forced_import(
                 db,
-                &format!("rarity_meter_{name}_realized_price"),
+                &format!("rarity_meter_{name}"),
                 version + Version::ONE,
                 indexes,
             )
         };
         Ok(Self {
-            under_4m: import("under_4m")?,
-            under_6m: import("under_6m")?,
-            over_4m: import("over_4m")?,
-            over_6m: import("over_6m")?,
+            under_4m: import("under_4m_realized_price")?,
+            under_6m: import("under_6m_realized_price")?,
+            over_4m: import("over_4m_realized_price")?,
+            over_6m: import("over_6m_realized_price")?,
+            under_4m_capitalized_price: import("under_4m_capitalized_price")?,
+            under_6m_capitalized_price: import("under_6m_capitalized_price")?,
         })
     }
 
-    /// Inputs are STH, LTH, 4–5m, and 5–6m, in that order.
+    /// Cap and supply inputs are STH, LTH, 4–5m, and 5–6m, in that order.
+    /// Capitalized-cap inputs are STH, 4–5m, and 5–6m.
     pub fn compute(
         &mut self,
         starting_height: Height,
         cap_raw: [&impl ReadableVec<Height, CentsSats>; 4],
         supply: [&impl ReadableVec<Height, Sats>; 4],
+        capitalized_cap_raw: [&impl ReadableVec<Height, CentsSquaredSats>; 3],
         spot: &impl ReadableVec<Height, Cents>,
         exit: &Exit,
     ) -> Result<()> {
@@ -61,11 +68,17 @@ impl ReferencePrices {
             source_end = source_end.min(cap.len()).min(supply.len());
             version = version.combine(cap.version()).combine(supply.version());
         }
+        for cap in capitalized_cap_raw {
+            source_end = source_end.min(cap.len());
+            version = version.combine(cap.version());
+        }
         let mut targets = [
             &mut self.under_4m.cents.height,
             &mut self.under_6m.cents.height,
             &mut self.over_4m.cents.height,
             &mut self.over_6m.cents.height,
+            &mut self.under_4m_capitalized_price.cents.height,
+            &mut self.under_6m_capitalized_price.cents.height,
         ];
         let mut start = usize::from(starting_height).min(source_end);
         for target in &mut targets {
@@ -84,6 +97,8 @@ impl ReferencePrices {
             let end = (start + COMPUTE_BATCH_SIZE).min(source_end);
             let caps = cap_raw.map(|source| source.collect_range_at(start, end));
             let supplies = supply.map(|source| source.collect_range_at(start, end));
+            let capitalized_caps =
+                capitalized_cap_raw.map(|source| source.collect_range_at(start, end));
             for row in 0..end - start {
                 let [sth, lth, band_4m_to_5m, band_5m_to_6m] = array::from_fn(|i| RealizedTotals {
                     cap_raw: caps[i][row],
@@ -96,8 +111,25 @@ impl ReferencePrices {
                     lth + band_4m_to_5m,
                     lth - band_5m_to_6m,
                 ];
-                for (target, value) in targets.iter_mut().zip(values) {
-                    target.push(value.price());
+                let [sth, band_4m_to_5m, band_5m_to_6m] =
+                    array::from_fn(|i| capitalized_caps[i][row]);
+                let capitalized_prices = [sth - band_4m_to_5m, sth + band_5m_to_6m]
+                    .into_iter()
+                    .zip(&values)
+                    .map(|(cap, totals)| {
+                        Cents::new(
+                            cap.inner()
+                                .checked_div(totals.cap_raw.as_u128())
+                                .unwrap_or(0) as u64,
+                        )
+                    });
+                for (target, price) in targets.iter_mut().zip(
+                    values
+                        .iter()
+                        .map(|value| value.price())
+                        .chain(capitalized_prices),
+                ) {
+                    target.push(price);
                 }
             }
             let _lock = exit.lock();
@@ -111,6 +143,8 @@ impl ReferencePrices {
             &mut self.under_6m,
             &mut self.over_4m,
             &mut self.over_6m,
+            &mut self.under_4m_capitalized_price,
+            &mut self.under_6m_capitalized_price,
         ] {
             price.compute_ratio(starting_height, spot, exit)?;
         }

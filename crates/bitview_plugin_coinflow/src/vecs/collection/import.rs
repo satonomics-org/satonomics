@@ -42,6 +42,7 @@ impl AggregateSources {
             })?,
             cap: import_aggregate(db, "coinflow_cap_cents", version)?,
             price: import_aggregate(db, "coinflow_price_cents", version)?,
+            capitalized_price: import_aggregate(db, "coinflow_capitalized_price_cents", version)?,
         })
     }
 }
@@ -116,6 +117,13 @@ impl AggregateVecs {
             horizon,
             cap,
             price,
+            capitalized_price: LazyPriceWithRatioPerBlock::from_height_source(
+                &metric_name("coinflow_capitalized_price"),
+                version,
+                aggregate.select(&sources.capitalized_price),
+                mappings,
+                spot_price,
+            ),
         }
     }
 }

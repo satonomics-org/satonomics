@@ -141,6 +141,32 @@ export function createCoinflowSection() {
         ],
       },
       {
+        name: "Capitalized Price",
+        tree: [
+          {
+            name: "Compare",
+            title: "Coinflow Capitalized Price by Holder Term",
+            top: frameworkCohorts.map(({ name, color, tree }) =>
+              price({ series: tree.capitalizedPrice, name, color }),
+            ),
+          },
+          ...frameworkCohorts.map(({ name, color, tree }) => {
+            const title =
+              name === "All"
+                ? "Coinflow Capitalized Price"
+                : `${name} Coinflow Capitalized Price`;
+            const [chart] = simplePriceRatioTree({
+              pattern: tree.capitalizedPrice,
+              title,
+              legend: name,
+              color,
+            });
+            return { ...chart, name };
+          }),
+        ],
+      },
+
+      {
         name: "Capitalization",
         tree: [
           {

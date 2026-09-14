@@ -76,7 +76,7 @@ lexopt = "0.3"
 owo-colors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
-toml = "1.1.5"
+toml = "1.1.6"
 tempfile = { workspace = true, optional = true }
 vecdb = { workspace = true }
 

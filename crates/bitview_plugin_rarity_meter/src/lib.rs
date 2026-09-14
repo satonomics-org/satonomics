@@ -4,6 +4,7 @@ use band::Band;
 use bitview_plugin::{
     ComputePlugin, ImportContext, Plugin, PluginId, PluginStorage, UpdateContext,
 };
+use bitview_plugin_bedrock::Vecs as BedrockVecs;
 use bitview_plugin_coinflow::Vecs as CoinflowVecs;
 use bitview_plugin_cointime::Vecs as CointimeVecs;
 use bitview_plugin_distribution::Vecs as DistributionVecs;
@@ -31,6 +32,7 @@ mod extreme;
 mod extremes;
 mod has;
 mod inner;
+mod median_component;
 #[cfg(test)]
 mod recovery_tests;
 mod reference_price;
@@ -52,8 +54,8 @@ pub struct Vecs<M: StorageMode = Rw> {
     #[traversable(skip)]
     db: Database,
 
-    /// Model-specific realized prices reconstructed from the distribution's
-    /// disjoint raw capitalization and supply histories.
+    /// Model-specific realized and capitalized prices reconstructed from the
+    /// distribution's disjoint raw capitalization and supply histories.
     pub reference_prices: ReferencePrices<M>,
 
     /// Reference-price components used by the Rarity Meter. A UTXO's creation
@@ -67,14 +69,23 @@ pub struct Vecs<M: StorageMode = Rw> {
     /// Full Rarity Meter combining local and cycle views to show how unusual
     /// spot price is across both young-coin and long-cycle reference models.
     pub full: RarityMeterInner<M>,
+    /// Full V2 combines 24 reference-price components, excluding LTH realized,
+    /// capitalized, and median prices, with the three lower-only Bedrock models.
+    pub full_v2: RarityMeterInner<M>,
     /// Local Rarity Meter focused on young-coin positioning. It combines
     /// under-four-month and under-six-month realized price with short-term-holder
     /// realized and capitalized price.
     pub local: RarityMeterInner<M>,
+    /// Local V2 adds under-four-month and under-six-month capitalized prices
+    /// and BTC- and USD-weighted STH median prices to Local's four reference models.
+    pub local_v2: RarityMeterInner<M>,
     /// Cycle Rarity Meter focused on long-cycle valuation. It combines six
     /// old-coin and all-chain reference-price models with rare lower-price
     /// boundaries from the raw, cointime, and coinflow Bedrock models.
     pub cycle: RarityMeterInner<M>,
+    /// Cycle V2 combines 16 all-chain, older-coin, cointime, and coinflow
+    /// reference prices with three Bedrock floors, excluding LTH-specific prices.
+    pub cycle_v2: RarityMeterInner<M>,
 }
 
 const COMPUTE_BATCH_SIZE: usize = 100_000;
@@ -84,6 +95,7 @@ impl Vecs {
         context: ImportContext<'_>,
         mappings: &MappingsVecs,
         distribution: &DistributionVecs,
+        bedrock: &BedrockVecs,
         cointime: &CointimeVecs,
         coinflow: &CoinflowVecs,
     ) -> Result<Self> {
@@ -96,6 +108,7 @@ impl Vecs {
                 version,
                 mappings,
                 distribution,
+                bedrock,
                 &reference_prices,
                 cointime,
                 coinflow,
@@ -103,8 +116,11 @@ impl Vecs {
             reference_prices,
             extremes: extremes::forced_import(&db, version, mappings)?,
             full: inner::forced_import(&db, "rarity_meter", version, mappings)?,
+            full_v2: inner::forced_import(&db, "rarity_meter_v2", version, mappings)?,
             local: inner::forced_import(&db, "local_rarity_meter", version, mappings)?,
+            local_v2: inner::forced_import(&db, "local_rarity_meter_v2", version, mappings)?,
             cycle: inner::forced_import(&db, "cycle_rarity_meter", version, mappings)?,
+            cycle_v2: inner::forced_import(&db, "cycle_rarity_meter_v2", version, mappings)?,
             db,
         };
         STORAGE.finalize_database(&this.db)?;
@@ -145,6 +161,7 @@ impl ComputePlugin for Vecs {
         let metrics = &distribution.cohorts;
         let realized = &metrics.realized;
         let cap_raw = &realized.cap_raw;
+        let capitalized_cap_raw = &realized.capitalized_cap_raw;
         let supply = &metrics.supply.total.cohorts.utxo;
 
         self.reference_prices.compute(
@@ -161,6 +178,11 @@ impl ComputePlugin for Vecs {
                 &supply.age._4m_to_5m.sats.height,
                 &supply.age._5m_to_6m.sats.height,
             ],
+            [
+                &capitalized_cap_raw.term.short,
+                &capitalized_cap_raw.age._4m_to_5m,
+                &capitalized_cap_raw.age._5m_to_6m,
+            ],
             spot,
             exit,
         )?;
@@ -174,6 +196,7 @@ impl ComputePlugin for Vecs {
                     &self.reference_prices,
                     cointime,
                     coinflow,
+                    spot,
                     exit,
                 )
             },
@@ -234,27 +257,74 @@ impl ComputePlugin for Vecs {
             &self.components.lth_realized_price,
             &self.components.lth_capitalized_price,
         ];
+        let local_v2_components = [
+            &self.components.under_4m_realized_price,
+            &self.components.under_6m_realized_price,
+            &self.components.under_4m_capitalized_price,
+            &self.components.under_6m_capitalized_price,
+            &self.components.sth_realized_price,
+            &self.components.sth_capitalized_price,
+            &self.components.sth_median_price_btc_weighted.component,
+            &self.components.sth_median_price_usd_weighted.component,
+        ];
+        let cycle_v2_components = [
+            &self.components.realized_price,
+            &self.components.capitalized_price,
+            &self.components.median_price_btc_weighted.component,
+            &self.components.median_price_usd_weighted.component,
+            &self.components.cointime_median_price_btc_weighted.component,
+            &self.components.cointime_median_price_usd_weighted.component,
+            &self.components.coinflow_median_price_btc_weighted.component,
+            &self.components.coinflow_median_price_usd_weighted.component,
+            &self.components.over_6m_realized_price,
+            &self.components.over_4m_realized_price,
+            &self.components.vaulted_price,
+            &self.components.active_price,
+            &self.components.true_market_mean_price,
+            &self.components.cointime_price,
+            &self.components.awake_price,
+            &self.components.coinflow_price,
+        ];
+        let starting_height = indexer.safe_lengths().height;
+        // Daily median revisions affect every block of their day, including
+        // blocks before the indexer's safe resume height.
+        let v2_starting_height = self
+            .components
+            .cointime_median_price_btc_weighted
+            .starting_height(starting_height);
         let jobs: [(
             &mut RarityMeterInner,
             &[&Component],
             &[[&DailyView<Height, Cents, RepeatDay>; 5]],
-        ); 2] = [
-            (&mut self.local, &local_components, &[]),
-            (&mut self.cycle, &cycle_components, &bedrock_floors),
-        ];
-        let starting_height = indexer.safe_lengths().height;
-        let has_work = jobs.iter().any(|(inner, components, lower_components)| {
-            inner.needs_compute(components, lower_components, spot, starting_height)
-        });
-        let compute = |(inner, components, lower_components)| {
-            inner::compute(
-                inner,
-                components,
-                lower_components,
-                spot,
+            Height,
+        ); 4] = [
+            (&mut self.local, &local_components, &[], starting_height),
+            (
+                &mut self.cycle,
+                &cycle_components,
+                &bedrock_floors,
                 starting_height,
-                exit,
-            )
+            ),
+            (
+                &mut self.local_v2,
+                &local_v2_components,
+                &[],
+                starting_height,
+            ),
+            (
+                &mut self.cycle_v2,
+                &cycle_v2_components,
+                &bedrock_floors,
+                v2_starting_height,
+            ),
+        ];
+        let has_work = jobs
+            .iter()
+            .any(|(inner, components, lower_components, start)| {
+                inner.needs_compute(components, lower_components, spot, *start)
+            });
+        let compute = |(inner, components, lower_components, start)| {
+            inner::compute(inner, components, lower_components, spot, start, exit)
         };
 
         if has_work {
@@ -269,6 +339,14 @@ impl ComputePlugin for Vecs {
             &[&self.local, &self.cycle],
             spot,
             starting_height,
+            exit,
+        )?;
+
+        inner::compute_combined(
+            &mut self.full_v2,
+            &[&self.local_v2, &self.cycle_v2],
+            spot,
+            v2_starting_height,
             exit,
         )?;
 
