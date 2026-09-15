@@ -7,7 +7,7 @@ use rayon::prelude::*;
 
 use crate::{
     addr::{AddrStateVecs, AddrTypeToTypeIndexMap, SourcedAddrData},
-    block::TxIndexes,
+    block::{Received, TxIndexes},
     compute::AddrReaders,
 };
 
@@ -175,12 +175,11 @@ impl AddrCache {
     /// Update transaction counts for addresses.
     pub fn update_tx_counts(
         &mut self,
-        outputs: AddrTypeToTypeIndexMap<TxIndexes>,
+        outputs: &AddrTypeToTypeIndexMap<Received>,
         inputs: AddrTypeToTypeIndexMap<TxIndexes>,
     ) {
         let mut lookup = self.as_lookup();
-        for ((output_type, outputs), (input_type, inputs)) in
-            outputs.into_iter().zip(inputs.into_iter())
+        for ((output_type, outputs), (input_type, inputs)) in outputs.iter().zip(inputs.into_iter())
         {
             debug_assert_eq!(output_type, input_type);
             lookup.select(output_type).update_tx_counts(outputs, inputs);

@@ -50,42 +50,53 @@ impl ImportMap {
             let path = entry?.path();
             if path.is_dir() {
                 self.scan_fs(root, &path, base_url)?;
-            } else if let Ok(relative) = path.strip_prefix(root) {
+            } else if let Ok(relative) = path.strip_prefix(root)
+                && Self::includes(relative)
+            {
                 self.process_file(relative, &fs::read(&path)?, base_url);
             }
         }
         Ok(())
     }
 
-    /// Process a file and insert into imports if it should be included.
-    fn process_file(&mut self, path: &Path, contents: &[u8], base_url: &str) {
+    /// Shared file selection for filesystem and embedded scans.
+    fn includes(path: &Path) -> bool {
         let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
 
         if !Self::EXTENSIONS.contains(&ext) {
-            return;
+            return false;
         }
 
         // Skip JS files at root (e.g. service-worker.js)
         if ext == "js" && path.parent().is_none_or(|p| p == Path::new("")) {
-            return;
+            return false;
         }
 
         // Skip development builds and test files
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
         if name.contains(".development.") || name.contains(".dev.") || name.contains(".test.") {
-            return;
+            return false;
         }
 
         // Skip underscore-prefixed files (partials/internal)
         if name.starts_with('_') {
-            return;
+            return false;
         }
 
         // Skip test files
         if path.components().any(|c| c.as_os_str() == "tests") {
-            return;
+            return false;
         }
 
+        path.file_stem().and_then(|s| s.to_str()).is_some()
+    }
+
+    /// Process a file and insert into imports if it should be included.
+    fn process_file(&mut self, path: &Path, contents: &[u8], base_url: &str) {
+        if !Self::includes(path) {
+            return;
+        }
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
         let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
             return;
         };

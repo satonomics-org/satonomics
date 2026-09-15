@@ -332,17 +332,19 @@ impl DayUrpds {
         weighted: BTreeMap<CentsCompact, WeightedMasses>,
         age_price_bounds: AgePriceBounds<PriceBounds<Cents>>,
     ) -> Self {
-        let mut all = WeightedModes::from_fn(|_| UrpdRaw::default());
-        let mut term = ByTerm::<WeightedPair<UrpdRaw>>::default();
-
-        for (price, masses) in weighted {
-            for id in WeightedModeId::ALL {
-                let distribution = all.select_mut(id);
-                Self::insert_mass(price, distribution, *masses.all.select(id));
-            }
-            Self::insert_pair(price, &mut term.short, &masses.term.short);
-            Self::insert_pair(price, &mut term.long, &masses.term.long);
-        }
+        let all = WeightedModes::from_fn(|id| {
+            Self::collect_mass(&weighted, |masses| *masses.all.select(id))
+        });
+        let term = ByTerm {
+            short: WeightedPair {
+                cointime: Self::collect_mass(&weighted, |masses| masses.term.short.cointime),
+                coinflow: Self::collect_mass(&weighted, |masses| masses.term.short.coinflow),
+            },
+            long: WeightedPair {
+                cointime: Self::collect_mass(&weighted, |masses| masses.term.long.cointime),
+                coinflow: Self::collect_mass(&weighted, |masses| masses.term.long.coinflow),
+            },
+        };
 
         Self {
             raw,
@@ -352,19 +354,18 @@ impl DayUrpds {
         }
     }
 
-    fn insert_pair(
-        price: CentsCompact,
-        distributions: &mut WeightedPair<UrpdRaw>,
-        masses: &WeightedPair<f64>,
-    ) {
-        Self::insert_mass(price, &mut distributions.cointime, masses.cointime);
-        Self::insert_mass(price, &mut distributions.coinflow, masses.coinflow);
-    }
-
-    fn insert_mass(price: CentsCompact, distribution: &mut UrpdRaw, mass: f64) {
-        let sats = Self::floor_sats(mass);
-        if sats != Sats::ZERO {
-            distribution.map.insert(price, sats);
+    fn collect_mass(
+        weighted: &BTreeMap<CentsCompact, WeightedMasses>,
+        mass: impl Fn(&WeightedMasses) -> f64,
+    ) -> UrpdRaw {
+        UrpdRaw {
+            map: weighted
+                .iter()
+                .filter_map(|(&price, masses)| {
+                    let sats = Self::floor_sats(mass(masses));
+                    (sats != Sats::ZERO).then_some((price, sats))
+                })
+                .collect(),
         }
     }
 

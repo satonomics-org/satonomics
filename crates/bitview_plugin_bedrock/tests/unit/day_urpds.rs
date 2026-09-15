@@ -256,3 +256,32 @@ fn ten_percent_density_has_inclusive_boundaries_and_matches_saved_snapshots() {
         500_000
     );
 }
+
+#[test]
+fn final_maps_floor_combined_mass_and_omit_zero_buckets_in_every_mode() {
+    let weights = ModeWeights::from_fn(|_| Some(AgeRange::from_fn(|_| 0.6)));
+    let entries = [
+        (AgeRangeId::Under1H, 200, 1),
+        (AgeRangeId::From5MTo6M, 100, 1),
+        (AgeRangeId::Under1H, 100, 1),
+        (AgeRangeId::From5MTo6M, 200, 0),
+    ]
+    .map(|(age, price, sats)| (age, CentsCompact::new(price), Sats::from(sats as u64)));
+    let urpds = DayUrpds::from_age_entries(entries, &weights);
+    for mode in urpds.all.iter() {
+        assert_eq!(mode.map.len(), 1);
+        assert_eq!(mode.map[&CentsCompact::new(100)], Sats::_1);
+    }
+    for mode in urpds.term.short.iter().chain(urpds.term.long.iter()) {
+        assert!(mode.map.is_empty());
+    }
+    assert_eq!(urpds.raw.map[&CentsCompact::new(100)], Sats::from(2_u64));
+    assert_eq!(urpds.raw.map[&CentsCompact::new(200)], Sats::_1);
+
+    let unavailable = DayUrpds::from_age_entries(entries, &ModeWeights::from_fn(|_| None));
+    assert_eq!(unavailable.raw.map, urpds.raw.map);
+    assert!(unavailable.all.iter().all(|mode| mode.map.is_empty()));
+    let empty = DayUrpds::from_age_entries([], &weights);
+    assert!(empty.raw.map.is_empty());
+    assert!(empty.all.iter().all(|mode| mode.map.is_empty()));
+}

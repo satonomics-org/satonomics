@@ -1,51 +1,29 @@
 use bitview_cohort::AmountRangeId;
-use brk_types::{Cents, Sats, TypeIndex};
-use rustc_hash::FxHashMap;
+use brk_types::Cents;
 
 use crate::{
-    addr::{AddrMetricsState, AddrReceivePreState, AddrReceiveStatus, AddrTypeToVec},
+    addr::{AddrMetricsState, AddrReceivePreState, AddrReceiveStatus, AddrTypeToTypeIndexMap},
+    block::Received,
     state::AddrStates,
 };
 
 use super::super::cache::AddrLookup;
 
-/// Aggregated receive data for a single address within a block.
-#[derive(Default)]
-struct AggregatedReceive {
-    total_value: Sats,
-    output_count: u32,
-}
-
 pub fn process_received(
-    received_data: AddrTypeToVec<(TypeIndex, Sats)>,
+    received: AddrTypeToTypeIndexMap<Received>,
     cohorts: &mut AddrStates,
     lookup: &mut AddrLookup<'_>,
     price: Cents,
     state: &mut AddrMetricsState,
 ) {
-    let max_type_len = received_data
-        .iter()
-        .map(|(_, v)| v.len())
-        .max()
-        .unwrap_or(0);
-    let mut aggregated: FxHashMap<TypeIndex, AggregatedReceive> =
-        FxHashMap::with_capacity_and_hasher(max_type_len, Default::default());
-
-    for (output_type, vec) in received_data.into_inner().into_iter() {
-        if vec.is_empty() {
+    for (output_type, received) in received.into_iter() {
+        if received.is_empty() {
             continue;
-        }
-
-        // Aggregate per address so each address is processed exactly once.
-        for (type_index, value) in vec {
-            let entry = aggregated.entry(type_index).or_default();
-            entry.total_value += value;
-            entry.output_count += 1;
         }
 
         let mut lookup = lookup.select(output_type);
         let mut metrics = state.select(output_type);
-        for (type_index, recv) in aggregated.drain() {
+        for (type_index, recv) in received {
             let (addr_data, status) = lookup.get_or_create_for_receive(type_index);
             let pre = AddrReceivePreState::capture(addr_data, output_type);
 

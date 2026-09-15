@@ -1,8 +1,6 @@
 use bitview_cohort::ByAddrType;
-use brk_types::{OutputType, Sats, TypeIndex};
+use brk_types::{OutputType, TypeIndex};
 use rustc_hash::FxHashMap;
-
-use crate::addr::AddrTypeToVec;
 
 const RECEIVED: u8 = 1;
 const SEEN_SENDING: u8 = 2;
@@ -13,14 +11,13 @@ pub struct TransferAddressCache {
 }
 
 impl TransferAddressCache {
-    pub fn prepare(&mut self, received_data: &AddrTypeToVec<(TypeIndex, Sats)>) {
+    pub fn prepare(&mut self, received: impl Iterator<Item = (OutputType, TypeIndex)>) {
         self.addresses.values_mut().for_each(FxHashMap::clear);
 
-        for (output_type, received) in received_data.iter() {
-            let addresses = self.addresses.get_mut_unwrap(output_type);
-            for (type_index, _) in received {
-                addresses.insert(*type_index, RECEIVED);
-            }
+        for (output_type, type_index) in received {
+            self.addresses
+                .get_mut_unwrap(output_type)
+                .insert(type_index, RECEIVED);
         }
     }
 
@@ -40,6 +37,8 @@ impl TransferAddressCache {
 
 #[cfg(test)]
 mod tests {
+    use std::iter;
+
     use brk_types::{OutputType, Sats, TypeIndex};
 
     use super::TransferAddressCache;
@@ -55,7 +54,11 @@ mod tests {
             .extend([(received_index, Sats::_1), (received_index, Sats::_1)]);
 
         let mut cache = TransferAddressCache::default();
-        cache.prepare(&received);
+        cache.prepare(
+            received
+                .iter()
+                .flat_map(|(ty, rows)| rows.iter().map(move |&(index, _)| (ty, index))),
+        );
 
         assert_eq!(
             cache.observe_send(OutputType::P2PKH, received_index),
@@ -78,7 +81,7 @@ mod tests {
             (true, false)
         );
 
-        cache.prepare(&AddrTypeToVec::default());
+        cache.prepare(iter::empty());
         assert_eq!(
             cache.observe_send(OutputType::P2PKH, received_index),
             (true, false)

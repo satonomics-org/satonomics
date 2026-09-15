@@ -2827,6 +2827,7 @@ dependencies = [
  "include_dir",
  "rapidhash",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

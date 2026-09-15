@@ -326,7 +326,7 @@ pub fn process_blocks(
         );
 
         // Update tx_count from the transaction-ordered output and input maps.
-        cache.update_tx_counts(outputs_result.tx_index_vecs, inputs_result.tx_index_vecs);
+        cache.update_tx_counts(&outputs_result.received, inputs_result.tx_index_vecs);
 
         let mut transacted = outputs_result.transacted;
         let mut height_to_sent = inputs_result.height_to_sent;
@@ -390,7 +390,12 @@ pub fn process_blocks(
             target.push_block(*value);
         }
 
-        transfer_addresses.prepare(&outputs_result.received_data);
+        transfer_addresses.prepare(
+            outputs_result
+                .received
+                .iter()
+                .flat_map(|(ty, entries)| entries.keys().copied().map(move |index| (ty, index))),
+        );
 
         // Process UTXO cohorts and Addr cohorts in parallel
         let (_, addr_result) = join(
@@ -408,7 +413,7 @@ pub fn process_blocks(
                 let mut lookup = cache.as_lookup();
 
                 process_received(
-                    outputs_result.received_data,
+                    outputs_result.received,
                     addr_states,
                     &mut lookup,
                     block_price,
