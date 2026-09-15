@@ -4,13 +4,13 @@ Open `index.html` directly in a browser. The data, page styles, and chart code a
 
 ## Refresh
 
-With the local backend running on localhost:3110, run from the repository root:
+With the local backend running on localhost:3110, run from this folder:
 
 ```sh
-node scripts/generate-sth.mjs
+node generate.mjs
 ```
 
-The generator includes today's in-progress data and updates the embedded snapshot in `index.html` atomically after validating all inputs. Run it again to refresh the partial day. It lives outside the website folder.
+The generator includes today's in-progress data and updates the embedded snapshot in `index.html` atomically after validating all inputs. Run it again to refresh the partial day.
 
 The updated backend must expose the Bedrock <4M, <5M, and <6M cost-basis min/max histories. Each pair contributes one trend line: a max increasing from the previous day selects min as the floor, and a min decreasing selects max as the ceiling. Flat bounds and contractions (a rising min or falling max as older coins age out) retain the selected side. Selection uses the bounds themselves, not candle overlap. If both extremes expand on the same day, retain the prior selection because their ordering is unknown. Before the first unambiguous expansion, or after missing observations, the line stays empty until a side is selected again. Zero-price buckets remain valid in the snapshot but are omitted from the logarithmic chart.
 

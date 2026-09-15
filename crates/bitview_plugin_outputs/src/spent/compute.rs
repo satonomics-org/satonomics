@@ -118,7 +118,12 @@ pub fn compute(vecs: &mut Vecs, indexer: &Indexer, exit: &Exit) -> Result<ExitGu
 
         pairs.sort_unstable_by_key(|(txout_index, _)| *txout_index);
 
-        for &(txout_index, txin_index) in &pairs {
+        // Build the stored mutation tree in bulk; appended outputs update directly.
+        let stored_len = vecs.txin_index.stored_len();
+        let stored_end = pairs.partition_point(|(index, _)| index.to_usize() < stored_len);
+        vecs.txin_index
+            .update_many(pairs[..stored_end].iter().copied())?;
+        for &(txout_index, txin_index) in &pairs[stored_end..] {
             vecs.txin_index.update(txout_index, txin_index)?;
         }
 

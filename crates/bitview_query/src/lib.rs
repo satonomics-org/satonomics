@@ -56,6 +56,8 @@ mod r#impl;
 pub use r#async::*;
 #[cfg(feature = "urpd")]
 pub use r#impl::ResolvedUrpd;
+#[cfg(feature = "price")]
+pub use r#impl::price::ResolvedHistoricalPrice;
 #[cfg(feature = "chain")]
 pub use r#impl::{
     BlockTemplateSource, ResolvedAddrChainTxs, ResolvedAddrTxs, ResolvedAddrUtxos,

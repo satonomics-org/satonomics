@@ -11,7 +11,7 @@ use rustc_hash::FxHashMap;
 use tracing::error;
 use vecdb::unlikely;
 
-use super::InputSource;
+use super::{InputSource, parent_cache::ParentCache, parent_read::ParentRead};
 use crate::processor::{BlockProcessor, transaction::ComputedTx};
 
 const PARALLEL_PARENT_READ_THRESHOLD: usize = 1_000;
@@ -26,6 +26,10 @@ pub struct InputResolver {
 }
 
 impl InputResolver {
+    pub fn clear_cache(&mut self) {
+        self.reads.cache.clear();
+    }
+
     pub fn resolve(
         &mut self,
         processor: &BlockProcessor<'_>,
@@ -111,10 +115,12 @@ impl InputResolver {
         self.inputs.clear();
 
         self.parent_locations.reserve(txs.len());
-        self.parent_locations.extend(
-            txs.iter()
-                .map(|tx| (tx.txid_prefix(), ParentLocation::SameBlock(tx.tx_index))),
-        );
+        self.parent_locations.extend(txs.iter().map(|tx| {
+            let prefix = tx.txid_prefix();
+            // A newly indexed transaction may replace a historical prefix.
+            self.reads.cache.invalidate(prefix);
+            (prefix, ParentLocation::SameBlock(tx.tx_index))
+        }));
 
         let total_inputs = txs.iter().map(|tx| tx.tx.input.len()).sum();
         self.inputs.reserve(total_inputs);
@@ -166,13 +172,13 @@ impl InputResolver {
 }
 
 #[derive(Clone, Copy)]
-pub enum ParentLocation {
+enum ParentLocation {
     SameBlock(TxIndex),
     Previous(PreviousParentIndex),
 }
 
 #[derive(Clone, Copy)]
-pub struct PreviousParentIndex(u32);
+struct PreviousParentIndex(u32);
 
 impl PreviousParentIndex {
     pub fn new(index: usize) -> Self {
@@ -189,19 +195,14 @@ impl PreviousParentIndex {
 const _: () = assert!(size_of::<ParentLocation>() == 8);
 
 #[derive(Clone, Copy)]
-pub struct ParentRead {
-    tx_index: TxIndex,
-    first_txout_index: TxOutIndex,
-}
-
-#[derive(Clone, Copy)]
-pub struct OutputRead {
+struct OutputRead {
     input_index: usize,
     txout_index: TxOutIndex,
 }
 
 #[derive(Default)]
-pub struct ReadBatch {
+struct ReadBatch {
+    cache: ParentCache,
     parents: Vec<ParentRead>,
     outputs: Vec<OutputRead>,
     output_types: Vec<OutputType>,
@@ -243,6 +244,12 @@ impl ReadBatch {
             .zip(previous_parent_prefixes.par_iter())
             .try_for_each(|read| {
                 let (read, txid_prefix) = read;
+                if let Some(cached) = self.cache.get(*txid_prefix)
+                    && cached.tx_index < current_tx_index
+                {
+                    *read = cached;
+                    return Ok(());
+                }
                 let store_result = processor.stores.tx_index(txid_prefix)?;
 
                 let tx_index = match store_result {
@@ -280,6 +287,10 @@ impl ReadBatch {
                     )
                     .ok_or(Error::Internal("Missing txout_index"))?;
             }
+        }
+
+        for (&prefix, &read) in previous_parent_prefixes.iter().zip(&self.parents) {
+            self.cache.insert(prefix, read);
         }
 
         Ok(())
@@ -350,7 +361,7 @@ impl ReadBatch {
 }
 
 #[derive(Clone, Copy)]
-pub enum UnresolvedInput {
+enum UnresolvedInput {
     Coinbase,
     PreviousBlock {
         parent_index: usize,
@@ -362,3 +373,7 @@ pub enum UnresolvedInput {
         txout_index: TxOutIndex,
     },
 }
+
+#[cfg(test)]
+#[path = "resolver_tests.rs"]
+mod tests;

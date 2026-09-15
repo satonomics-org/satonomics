@@ -7,6 +7,39 @@ use vecdb::{
 };
 
 #[test]
+fn collected_ranges_reuse_cursor_across_stored_and_pending_data() -> Result<()> {
+    let temp = TempDir::new()?;
+    let db = Database::open(temp.path())?;
+    let mut vec = PcoVec::<usize, u64>::import(&db, "ranges", Version::ONE)?;
+    for index in 0..20_000 {
+        vec.push(index as u64 * 37);
+    }
+    vec.write()?;
+    for index in 20_000..20_010 {
+        vec.push(index as u64 * 37);
+    }
+    let mut cursor = vec.cursor();
+    let mut values = vec![u64::MAX];
+    for (from, to) in [
+        (0, 0),
+        (1, 1_025),
+        (1_025, 2_100),
+        (16_380, 16_400),
+        (19_995, 20_010),
+        (20_000, usize::MAX),
+        (10, 25),
+        (25, 20),
+        (usize::MAX, usize::MAX),
+        (0, 20_010),
+    ] {
+        cursor.collect_range_into_at(from, to, &mut values);
+        assert_eq!(values, vec.collect_range_at(from, to));
+        assert_eq!(cursor.position(), from.min(20_010) + values.len());
+    }
+    Ok(())
+}
+
+#[test]
 fn pco_u8_cursor_crosses_page_and_chunk_boundaries() -> Result<()> {
     let temp = TempDir::new()?;
     let db = Database::open(temp.path())?;

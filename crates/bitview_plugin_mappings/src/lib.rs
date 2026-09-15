@@ -39,6 +39,7 @@ use vecdb::{Database, IndexVec, ReadableBoxedVec, ReadableCloneableVec, Rw, Stor
 
 pub use dependencies::Dependencies;
 pub use has::HasMappings;
+pub use tx_heights::TxHeightMap;
 
 const STORAGE: PluginStorage = PluginStorage::new(PluginId::new("mappings"), Version::new(9));
 pub const ID: PluginId = STORAGE.id();

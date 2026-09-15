@@ -20,38 +20,30 @@ fn effective_range(first: usize, count: usize, skip_count: usize) -> Range<usize
     start..first + count
 }
 
-fn merge_sorted<T: Copy + Ord>(window: &mut Vec<T>, block: &[T], buffer: &mut Vec<T>) {
+/// Merge the new block while removing the expired multiset from the old window.
+fn update_sorted<T: Copy + Ord>(
+    window: &mut Vec<T>,
+    block: &[T],
+    expired: &[T],
+    buffer: &mut Vec<T>,
+) {
     buffer.clear();
-    buffer.reserve(window.len() + block.len());
+    buffer.reserve(window.len() + block.len() - expired.len());
 
-    let (mut wi, mut bi) = (0, 0);
-    while wi < window.len() && bi < block.len() {
-        if window[wi] <= block[bi] {
-            buffer.push(window[wi]);
-            wi += 1;
-        } else {
+    let (mut bi, mut ei) = (0, 0);
+    for &value in window.iter() {
+        if ei < expired.len() && value == expired[ei] {
+            ei += 1;
+            continue;
+        }
+        while bi < block.len() && block[bi] < value {
             buffer.push(block[bi]);
             bi += 1;
         }
+        buffer.push(value);
     }
-    buffer.extend_from_slice(&window[wi..]);
+    debug_assert_eq!(ei, expired.len());
     buffer.extend_from_slice(&block[bi..]);
-    mem::swap(window, buffer);
-}
-
-fn remove_sorted<T: Copy + Ord>(window: &mut Vec<T>, block: &[T], buffer: &mut Vec<T>) {
-    buffer.clear();
-    buffer.reserve(window.len().saturating_sub(block.len()));
-
-    let mut bi = 0;
-    for &value in window.iter() {
-        if bi < block.len() && value == block[bi] {
-            bi += 1;
-        } else {
-            buffer.push(value);
-        }
-    }
-    debug_assert_eq!(bi, block.len());
     mem::swap(window, buffer);
 }
 
@@ -334,11 +326,8 @@ impl<T: NumericValue + JsonSchema> PerBlockDistribution<T> {
             vec.truncate_if_needed_at(start)?;
         }
 
-        // Persistent sorted window: O(n) merge-insert for new block, O(n) merge-filter
-        // for expired block. Avoids re-sorting every block. Cursor reads only the new
-        // block (~1 page decompress vs original's ~4). Ring buffer caches per-block
-        // sorted values for O(1) expiry.
-        // Peak memory: 2 × ~15k window elements + n_blocks × ~2500 cached ≈ 360 KB.
+        // Merge new values and remove the expired block in one pass. The ring
+        // keeps each block sorted for exact multiset expiry, including duplicates.
         let mut block_ring: VecDeque<Vec<T>> = VecDeque::with_capacity(n_blocks + 1);
         let mut cursor = source.cursor();
         let mut sorted_window: Vec<T> = Vec::new();
@@ -385,17 +374,14 @@ impl<T: NumericValue + JsonSchema> PerBlockDistribution<T> {
             });
             new_block.sort_unstable();
 
-            // Merge-insert new sorted block into sorted_window: O(n+m)
-            merge_sorted(&mut sorted_window, &new_block, &mut merge_buf);
-
+            let expired = (block_ring.len() == n_blocks).then(|| block_ring.pop_front().unwrap());
+            update_sorted(
+                &mut sorted_window,
+                &new_block,
+                expired.as_deref().unwrap_or_default(),
+                &mut merge_buf,
+            );
             block_ring.push_back(new_block);
-
-            // Expire oldest block: merge-filter its sorted values from sorted_window in O(n)
-            if block_ring.len() > n_blocks {
-                let expired = block_ring.pop_front().unwrap();
-
-                remove_sorted(&mut sorted_window, &expired, &mut merge_buf);
-            }
 
             if sorted_window.is_empty() {
                 for vec in [
@@ -509,13 +495,14 @@ impl<T: NumericValue + JsonSchema> PerBlockDistribution<T> {
 
         for idx in start..fi_len {
             let new_block = read_block(idx);
-            merge_sorted(&mut sorted_window, &new_block, &mut merge_buf);
+            let expired = (block_ring.len() == n_blocks).then(|| block_ring.pop_front().unwrap());
+            update_sorted(
+                &mut sorted_window,
+                &new_block,
+                expired.as_deref().unwrap_or_default(),
+                &mut merge_buf,
+            );
             block_ring.push_back(new_block);
-
-            if block_ring.len() > n_blocks {
-                let expired = block_ring.pop_front().unwrap();
-                remove_sorted(&mut sorted_window, &expired, &mut merge_buf);
-            }
 
             self.push_weighted_sorted(&sorted_window);
         }
@@ -535,7 +522,7 @@ mod tests {
 
     use brk_types::{VSize, get_weighted_percentile};
 
-    use super::{effective_range, merge_sorted, remove_sorted};
+    use super::{effective_range, update_sorted};
 
     #[test]
     fn rolling_helpers_preserve_duplicate_weighted_entries() {
@@ -543,14 +530,38 @@ mod tests {
         let block = vec![(2, 150), (3, 100)];
         let mut buffer = Vec::new();
 
-        merge_sorted(&mut window, &block, &mut buffer);
-        assert_eq!(
-            window,
-            vec![(1, 100), (2, 100), (2, 150), (2, 200), (3, 100), (4, 100)]
-        );
-
-        remove_sorted(&mut window, &[(2, 100), (2, 200)], &mut buffer);
+        update_sorted(&mut window, &block, &[(2, 100), (2, 200)], &mut buffer);
         assert_eq!(window, vec![(1, 100), (2, 150), (3, 100), (4, 100)]);
+    }
+
+    #[test]
+    fn fused_window_matches_rebuild_with_empty_blocks_and_full_expiry() {
+        let blocks: Vec<Vec<u64>> = (0..64)
+            .map(|height| {
+                let mut block: Vec<_> = (0..height % 13)
+                    .map(|tx| (height * 7 + tx * 3) % 5)
+                    .collect();
+                block.sort_unstable();
+                block
+            })
+            .collect();
+        for size in [1, 2, 6] {
+            let mut window = Vec::new();
+            let mut buffer = Vec::new();
+            for (height, block) in blocks.iter().enumerate() {
+                let expired = height
+                    .checked_sub(size)
+                    .map_or(&[][..], |i| blocks[i].as_slice());
+                update_sorted(&mut window, block, expired, &mut buffer);
+                let mut expected: Vec<_> = blocks[height.saturating_sub(size - 1)..=height]
+                    .iter()
+                    .flatten()
+                    .copied()
+                    .collect();
+                expected.sort_unstable();
+                assert_eq!(window, expected, "window={size}, height={height}");
+            }
+        }
     }
 
     #[test]
@@ -587,12 +598,14 @@ mod tests {
                 .collect::<Vec<_>>();
             block.sort_unstable();
 
-            merge_sorted(&mut window, &block, &mut buffer);
+            let expired = (ring.len() == 6).then(|| ring.pop_front().unwrap());
+            update_sorted(
+                &mut window,
+                &block,
+                expired.as_deref().unwrap_or_default(),
+                &mut buffer,
+            );
             ring.push_back(block);
-            if ring.len() > 6 {
-                let expired = ring.pop_front().unwrap();
-                remove_sorted(&mut window, &expired, &mut buffer);
-            }
 
             let first = height.saturating_sub(5);
             let mut naive = blocks[first..=height]

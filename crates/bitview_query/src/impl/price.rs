@@ -1,3 +1,4 @@
+use bitview_plugin::PublicationReadGuard;
 use brk_error::{Error, OptionData, Result};
 use brk_types::{
     Cents, Dollars, ExchangeRates, HOUR4_INTERVAL, Height, HistoricalPrice, HistoricalPriceEntry,
@@ -10,26 +11,55 @@ use crate::Query;
 // A timestamp is u32 seconds. Reject corrupt lengths before reading the mapping.
 const MAX_BUCKETS: usize = ((u32::MAX - INDEX_EPOCH) / HOUR4_INTERVAL) as usize + 1;
 
+/// Validated historical-price sources held stable through response selection.
+pub struct ResolvedHistoricalPrice<'a> {
+    query: &'a Query,
+    source_len: usize,
+    _publication: PublicationReadGuard,
+}
+
 impl Query {
     /// Completed four-hour closes, labeled by their exclusive interval end.
     /// Point requests select the latest nonempty close at or before the timestamp.
     pub fn historical_price(&self, timestamp: Option<Timestamp>) -> Result<HistoricalPrice> {
+        self.resolve_historical_price()?.get(timestamp)
+    }
+
+    pub fn resolve_historical_price(&self) -> Result<ResolvedHistoricalPrice<'_>> {
         let plugins = self.plugins();
-        let _guard = self.read_publication()?;
+        let publication = self.read_publication()?;
         let source_len = usize::from(self.safe_lengths().height);
         let prices = &plugins.price.spot.cents.height;
         if prices.len() < source_len || plugins.mappings.timestamp.monotonic.len() < source_len {
             return Err(Error::StateUpdating);
         }
+        if plugins.mappings.first_height.hour4.len() > MAX_BUCKETS {
+            return Err(Error::Internal(
+                "Historical price mapping exceeds timestamp range",
+            ));
+        }
+        Ok(ResolvedHistoricalPrice {
+            query: self,
+            source_len,
+            _publication: publication,
+        })
+    }
+}
+
+impl ResolvedHistoricalPrice<'_> {
+    /// Valid only for the publication held by this resolved read.
+    pub fn revision(&self) -> u64 {
+        self.query.indexer().publication().revision()
+    }
+
+    pub fn get(&self, timestamp: Option<Timestamp>) -> Result<HistoricalPrice> {
+        let plugins = self.query.plugins();
+        let source_len = self.source_len;
+        let prices = &plugins.price.spot.cents.height;
         let mut bounds = ReadBounds::new();
         bounds.set(Index::Height.name(), source_len);
         bounds.scope(|| {
             let first_heights = &plugins.mappings.first_height.hour4;
-            if first_heights.len() > MAX_BUCKETS {
-                return Err(Error::Internal(
-                    "Historical price mapping exceeds timestamp range",
-                ));
-            }
             let mapping = first_heights.collect_range_dyn(0, first_heights.len());
             // Reuse one decompressed page while walking ordered closes.
             let mut cursor = prices.cursor();

@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { buildCloudSnapshot, generateCloudSnapshot, dateAt, validPrice } from './cloud-snapshot.mjs';
+import { buildCloudSnapshot, generateCloudSnapshot, dateAt, validPrice } from '../../scripts/cloud-snapshot.mjs';
 
 const sources = [
   'rarity_meter_under_4m_realized_price_cents',
@@ -63,7 +63,7 @@ export function buildSnapshot(histories, start, end, generatedAt) {
 export function generateSnapshot(options = {}) {
   return generateCloudSnapshot({
     ...options,
-    output: options.output ?? new URL('../website_next_next/sth/index.html', import.meta.url),
+    output: options.output ?? new URL('./index.html', import.meta.url),
     seriesNames,
     buildSnapshot,
   });

@@ -40,12 +40,13 @@ impl BlockStats {
             .iter()
             .enumerate()
             .map(|(i, block)| {
-                let pct = if i == 0 {
-                    CORE_PERCENTILES
+                if i == 0 {
+                    Self::compute(block.iter(), txs, CORE_PERCENTILES)
                 } else {
-                    PROJECTED_PERCENTILES
-                };
-                Self::compute(block, txs, pct)
+                    // Projected blocks descend by rate. Read backwards so sort's
+                    // ascending-run check avoids sorting them again.
+                    Self::compute(block.iter().rev(), txs, PROJECTED_PERCENTILES)
+                }
             })
             .collect()
     }
@@ -54,7 +55,11 @@ impl BlockStats {
     /// matches mempool.space's `feeRange` semantics where each tx's
     /// contribution scales with its vsize, so a tiny outlier rate
     /// only counts for its own vsize fraction.
-    fn compute(block: &[TxIndex], txs: &[SnapTx], percentiles: [f64; 7]) -> Self {
+    fn compute<'a>(
+        block: impl ExactSizeIterator<Item = &'a TxIndex>,
+        txs: &[SnapTx],
+        percentiles: [f64; 7],
+    ) -> Self {
         let mut total_fee = Sats::default();
         let mut total_vsize = VSize::default();
         let mut total_size: u64 = 0;

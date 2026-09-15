@@ -84,6 +84,16 @@ impl<'a, I: VecIndex, T: VecValue, V: ReadableVec<I, T> + ?Sized> Cursor<'a, I, 
         Some(self.buf[local].clone())
     }
 
+    /// Collects a range into a reusable output buffer, retaining the decoded
+    /// chunk for the next call. Supports gaps and backward reads.
+    pub fn collect_range_into_at(&mut self, from: usize, to: usize, out: &mut Vec<T>) {
+        out.clear();
+        self.pos = from.min(self.len);
+        let count = to.min(self.len).saturating_sub(self.pos);
+        out.reserve(count);
+        self.for_each(count, |value| out.push(value));
+    }
+
     /// Returns the next value and advances position, or `None` if exhausted.
     #[inline]
     #[allow(clippy::should_implement_trait)]

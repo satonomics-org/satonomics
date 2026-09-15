@@ -49,6 +49,8 @@ mod error_body;
 mod error_code;
 mod etag;
 mod extended;
+#[cfg(feature = "chain")]
+mod historical_price_cache;
 mod json_error;
 mod params;
 #[cfg(any(feature = "series", feature = "chain"))]
@@ -133,6 +135,8 @@ impl Server {
                 raw_block_bodies: Arc::new(Semaphore::new(RawBodyPermit::CAPACITY)),
                 #[cfg(feature = "chain")]
                 historical_price_bodies: Arc::new(Semaphore::new(2)),
+                #[cfg(feature = "chain")]
+                historical_price_cache: Arc::default(),
                 #[cfg(feature = "chain")]
                 mempool_txid_bodies: Arc::new(Semaphore::new(2)),
                 #[cfg(feature = "chain")]

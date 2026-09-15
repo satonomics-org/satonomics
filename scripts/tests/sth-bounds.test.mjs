@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test from 'node:test';
-import { buildSnapshot, generateSnapshot, seriesNames, trendBounds } from '../generate-sth.mjs';
+import { buildSnapshot, generateSnapshot, seriesNames, trendBounds } from '../../website_next_next/sth/generate.mjs';
 
 const candle = (low, high) => [(low + high) / 2, high, low, (low + high) / 2];
 

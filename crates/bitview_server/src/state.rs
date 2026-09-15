@@ -16,11 +16,11 @@ use serde::Serialize;
 use serde_json::to_vec;
 use tokio::sync::Semaphore;
 
-#[cfg(feature = "chain")]
-use crate::prepared_json::PreparedJson;
 #[cfg(feature = "series")]
 use crate::series_bodies::SeriesBodies;
 use crate::{CacheParams, CacheStrategy, CdnCacheMode, Error, Website, extended::ResponseExtended};
+#[cfg(feature = "chain")]
+use crate::{historical_price_cache::HistoricalPriceCache, prepared_json::PreparedJson};
 
 #[derive(Clone, Deref)]
 pub struct AppState {
@@ -32,6 +32,8 @@ pub struct AppState {
     pub raw_block_bodies: Arc<Semaphore>,
     #[cfg(feature = "chain")]
     pub historical_price_bodies: Arc<Semaphore>,
+    #[cfg(feature = "chain")]
+    pub historical_price_cache: Arc<HistoricalPriceCache>,
     #[cfg(feature = "chain")]
     pub mempool_txid_bodies: Arc<Semaphore>,
     #[cfg(feature = "chain")]

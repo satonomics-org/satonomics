@@ -15,19 +15,23 @@ pub async fn serve(
     headers: HeaderMap,
     timestamp: Option<Timestamp>,
 ) -> Result<Response> {
+    let cache = state.historical_price_cache.clone();
     let bodies = state.historical_price_bodies.clone();
     state
         .read_body(
             &state.sync_query,
             &state.historical_price_bodies,
             move |query, permit| {
-                let value = query.historical_price(timestamp)?;
-                let bytes = to_vec(&value)?;
+                let source = query.resolve_historical_price()?;
+                let (bytes, identity) = if timestamp.is_none() {
+                    cache.get_or_try_init(source.revision(), || source.get(None))?
+                } else {
+                    let bytes = to_vec(&source.get(timestamp)?)?;
+                    let identity = RepresentationId::content(&bytes);
+                    (bytes.into(), identity)
+                };
                 let params = CacheParams::resolve(
-                    &AppState::representation_strategy(
-                        Version::ONE,
-                        RepresentationId::content(&bytes),
-                    ),
+                    &AppState::representation_strategy(Version::ONE, identity),
                     CdnCacheMode::Live,
                 );
                 if params.matches_etag(&headers) {
@@ -38,7 +42,7 @@ pub async fn serve(
                 };
                 Ok(Some(permit.response(
                     params,
-                    bytes.into(),
+                    bytes,
                     HeaderMapExtended::insert_content_type_application_json,
                 )))
             },

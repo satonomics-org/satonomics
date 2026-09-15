@@ -729,7 +729,6 @@ dependencies = [
  "brk_rpc",
  "brk_types",
  "derive_more",
- "rangeindex",
  "rayon",
  "rustc-hash",
  "serde",

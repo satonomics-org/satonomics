@@ -118,7 +118,13 @@ pub fn process_blocks(
     // Create reusable iterators and buffers for per-block reads
     let tx_heights = mappings.tx_heights.read();
     let mut txout_iters = TxOutReaders::new(indexer);
-    let mut txin_iters = TxInReaders::new(indexer, &inputs.value, &tx_heights);
+    let mut txin_iters = TxInReaders::new(
+        &inputs.value,
+        &indexer.vecs().inputs.outpoint,
+        &indexer.vecs().inputs.output_type,
+        &indexer.vecs().inputs.type_index,
+        &tx_heights,
+    );
     let mut txout_to_tx_index_buf = IndexToTxIndexBuf::new();
     let mut txin_to_tx_index_buf = IndexToTxIndexBuf::new();
 
